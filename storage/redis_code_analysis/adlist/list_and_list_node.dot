@@ -1,0 +1,20 @@
+digraph list_and_list_node {
+    rankdir=LR;
+    node [shape=record];
+    label = "双端链表与节点";
+
+    list_node_1 [label = "{<prev> prev| value|<next> next}"];
+    list_node_2 [label = "{<prev> prev| value|<next> next}"];
+    list_node_3 [label = "{<prev> prev| value|<next> next}"];
+   
+    node [width=1.5];
+    list [label = "<head> head|<tail> tail|<dup> dup|<free> free|<match> match|<len> len"];
+    list_node_1 -> list_node_2;
+    list_node_2 -> list_node_1;
+    
+    list_node_2 -> list_node_3;
+    list_node_3 -> list_node_2;
+
+    list:head -> list_node_1;
+    list:tail -> list_node_3;
+}

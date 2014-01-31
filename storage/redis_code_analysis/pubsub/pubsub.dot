@@ -1,0 +1,8 @@
+digraph pubsub {
+    rankdir=LR;
+    channel [shape="box"];
+    publisher -> channel [label="channel\nmsg"];
+    channel -> subscriber_1 [label="msg"];
+    channel -> subscriber_2 [label="msg"];
+    channel -> subscriber_3 [label="msg"];
+}

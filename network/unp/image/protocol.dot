@@ -1,0 +1,8 @@
+digraph p {
+
+    ip [label = "IPv4 或 IPv6"];
+
+    TCP -> ip;
+    UDP -> ip;
+    SCTP -> ip;
+}

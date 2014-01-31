@@ -1,0 +1,16 @@
+digraph subscribe {
+    rankdir=LR;
+    node [shape="record"];
+
+    redisServer [label="<name>redisServer\ 结构|<other_fields_1>其他属性\ ...|<pubsub_channels> pubsub_channels|<other_fields_2>其他属性\ ..."];
+
+    pubsub_channels [label="<other_channels>其他频道\ ...|<news> news|<other_channels_2>其他频道\ ..."];
+
+    client_123 [label="client_123"];
+    client_456 [label="client_456"];
+
+    redisServer:pubsub_channels -> pubsub_channels [label="所有频道"];
+    pubsub_channels:news -> client_123 [label="所有订阅客户端"];
+    client_123 -> client_456;
+    client_456 -> client_123;
+}
