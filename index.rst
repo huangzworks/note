@@ -27,6 +27,7 @@ huangz/note
 
    storage/redis_code_analysis/index
    storage/reuse-redis-module/index
+   storage/mariadb/index
 
 
 .. _os:
