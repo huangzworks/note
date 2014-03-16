@@ -12,6 +12,7 @@ MariaDB
 .. toctree::
    :maxdepth: 2
 
+   version
    install
    send-query
-   create-and-use-table
+   primary-db-operation
