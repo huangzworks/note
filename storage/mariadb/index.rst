@@ -14,3 +14,4 @@ MariaDB
 
    install
    send-query
+   create-and-use-table
