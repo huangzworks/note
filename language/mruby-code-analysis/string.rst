@@ -295,7 +295,7 @@ MRuby 会根据机器的位长度来决定这个数组的最大长度：
 
         node [shape = record]
 
-        RString [label = " <head> RString | ... | len \n 100 | as.heap.aux.capa \n 100  | ... | <ptr> ptr "];
+        RString [label = " <head> RString | ... | as.heap.len \n 100 | as.heap.aux.capa \n 100 | <ptr> as.heap.ptr "];
 
         buffer [label = " { 'l' | 'o' | 'n' | 'g' | ' ' | 't' | 'e' | 'x' | 't' | ... | '\\0' } "];
 
@@ -460,9 +460,9 @@ MRuby 会根据机器的位长度来决定这个数组的最大长度：
 
         node [shape = record]
 
-        before_RString [label = " <head> RString | ... | len \n 11 | <shared> as.heap.aux.shared  | ... | <ptr> ptr "];
+        before_RString [label = " <head> RString | ... | as.heap.len \n 11 | <shared> as.heap.aux.shared  | <ptr> as.heap.ptr "];
 
-        after_RString [label = " <head> RString | ... | len \n 5 | <shared> as.heap.aux.shared  | ... | <ptr> ptr "];
+        after_RString [label = " <head> RString | ... | as.heap.len \n 5 | <shared> as.heap.aux.shared  | <ptr> as.heap.ptr "];
 
         mrb_shared_string [label = " <head> mrb_shared_string | ... | refcnt \n 2 | <ptr> ptr | len \n 11 "];
 
