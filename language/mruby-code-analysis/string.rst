@@ -333,7 +333,9 @@ MRuby 会根据机器的位长度来决定这个数组的最大长度：
 
 .. code-block:: Ruby
 
-    irb(main):001:0> orig = 'hello world'
+    mirb - Embeddable Interactive Ruby Shell
+
+    > orig = "hello world"
     => "hello world"
 
 这个字符串对象指向一个包含 ``11`` 个字符的缓冲区，
@@ -347,10 +349,10 @@ MRuby 会根据机器的位长度来决定这个数组的最大长度：
 
 .. code-block:: Ruby
 
-    irb(main):002:0> after = orig.slice(0, 5)
+    > after = orig.slice(0,5)
     => "hello"
 
-    irb(main):003:0> after
+    > after
     => "hello"
 
 那么实现这个 ``slice`` 操作的方法可能是这样的：
