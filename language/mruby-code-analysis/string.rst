@@ -177,6 +177,31 @@ MRuby 会根据机器的位长度来决定这个数组的最大长度：
       s->flags |= (tmp_n) << MRB_STR_EMBED_LEN_SHIFT;\
     } while (0)
 
+作为例子，
+下图展示了一个长度为 ``11`` 字节，
+保存了字符串 ``"hello world"`` 的嵌入字符串：
+
+.. graphviz::
+
+    digraph {
+
+        rankdir = LR;
+
+        //
+
+        node [shape = record]
+
+        RString [label = " <head> RString | ... | <ptr> as.heap.ptr "];
+
+        buffer [label = " { <0> 'h' | 'e' | 'l' | 'l' | <4> 'o' | ' ' | 'w' | 'o' | 'r' | 'l' | <10> 'd' | '\\0' } "];
+
+        //
+
+        RString:ptr -> buffer;
+
+    }
+
+
 
 不定长字符串
 ---------------
