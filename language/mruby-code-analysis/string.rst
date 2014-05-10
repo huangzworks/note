@@ -306,17 +306,13 @@ MRuby 会根据机器的位长度来决定这个数组的最大长度：
 如代码所示，
 ``str_new`` 函数会根据 ``len`` 的大小来判断应该创建嵌入字符串还是不定长字符串。
 
-下图展示了一个不定长字符串对象 ``message`` 示例：
+下图展示了一个不定长字符串对象示例：
 
 .. graphviz::
 
     digraph {
 
         rankdir = LR;
-
-        node [shape = plaintext]
-
-        message;
 
         node [shape = record]
 
@@ -326,7 +322,6 @@ MRuby 会根据机器的位长度来决定这个数组的最大长度：
 
         //
 
-        message -> RString:head;
         RString:ptr -> buffer;
     }
 
