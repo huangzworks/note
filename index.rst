@@ -20,6 +20,7 @@ huangz/note
    :maxdepth: 2
 
    language/clojure/index
+   language/mruby-code-analysis/index
 
 
 .. _storage:
