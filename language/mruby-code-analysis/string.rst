@@ -191,13 +191,13 @@ MRuby 会根据机器的位长度来决定这个数组的最大长度：
 
         node [shape = record]
 
-        RString [label = " <head> RString | ... | <ptr> as.heap.ptr "];
+        RString [label = " <head> RString | ... | <ary> as.ary "];
 
         buffer [label = " { <0> 'h' | 'e' | 'l' | 'l' | <4> 'o' | ' ' | 'w' | 'o' | 'r' | 'l' | <10> 'd' | '\\0' } "];
 
         //
 
-        RString:ptr -> buffer;
+        RString:ary -> buffer;
 
     }
 
