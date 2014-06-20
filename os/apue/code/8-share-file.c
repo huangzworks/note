@@ -22,12 +22,12 @@ int main(void) {
     pid_t pid = fork();
 
     if (pid == 0) {
-        // parent
-        fputs(PARENT_CONENT, f);
-    }
-    else if (pid > 0) {
         // child
         fputs(CHILD_CONTENT, f);
+    }
+    else if (pid > 0) {
+        // parent
+        fputs(PARENT_CONENT, f);
     }
     else {
         printf("fork fail\n");
