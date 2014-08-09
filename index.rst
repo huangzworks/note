@@ -91,3 +91,12 @@ huangz/note
    :maxdepth: 2
 
    thinking_and_learning/pragmatic_thinking_and_learning/index
+
+
+自省
+------------
+
+.. toctree::
+   :maxdepth: 2
+
+   introspection/zeng-guofan-home-letter/index
