@@ -1,0 +1,299 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>命名空间 &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="up" title="Clojure" href="index.html" />
+    <link rel="next" title="多态方法" href="multimethod.html" />
+    <link rel="prev" title="条件求值" href="condition.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="multimethod.html" title="多态方法"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="condition.html" title="条件求值"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Clojure</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>命名空间<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<p>命名空间（namespace）保存了从符号到 Var 或 Class 的映射。</p>
+<p>在默认情况下，用 <code class="docutils literal"><span class="pre">def</span></code> 或其变种创建的任何 Var 都被添加到当前命名空间中，不过，通过使用 <code class="docutils literal"><span class="pre">require</span></code> 、 <code class="docutils literal"><span class="pre">refer</span></code> 或者 <code class="docutils literal"><span class="pre">use</span></code> 等函数，也可以引用其他命名空间的符号。</p>
+<div class="section" id="id2">
+<h2>带前缀和不带前缀的名字<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>如果在命名空间里可以直接调用给定的名字而不必携带任何前缀，那么我们称这个名字为“不带前缀的名字”（unqualified name）。</p>
+<p>如果调用名字时需要显式地自定它的命名空间或者包名，那么称这个名字为“带前缀的名字”（qualified name）。</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="nv">map</span>
+<span class="o">#</span><span class="nv">&lt;core$map</span> <span class="nv">clojure.core$map</span><span class="o">@</span><span class="mi">1</span><span class="nv">b50639&gt;</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">require</span> <span class="ss">&#39;clojure.set</span><span class="p">)</span>
+<span class="nv">nil</span>
+
+<span class="nv">user=&gt;</span> <span class="nv">clojure.set/intersection</span>
+<span class="o">#</span><span class="nv">&lt;set$intersection</span> <span class="nv">clojure.set$intersection</span><span class="o">@</span><span class="mi">1</span><span class="nv">ba7dab&gt;</span>
+</pre></div>
+</div>
+<p>在上面的代码中， <code class="docutils literal"><span class="pre">map</span></code> 就是不带前缀的，而 <code class="docutils literal"><span class="pre">intersection</span></code> 则是带前缀的。</p>
+</div>
+<div class="section" id="id3">
+<h2>创建命名空间<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<p>宏 <code class="docutils literal"><span class="pre">ns</span></code> 用于创建一个新的命名空间，它默认载入所有 <code class="docutils literal"><span class="pre">java.lang</span></code> 中的类和 <code class="docutils literal"><span class="pre">clojure.core</span></code> 中的所有函数。</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="kd">ns </span><span class="nv">my-new-ns</span><span class="p">)</span>
+<span class="nv">nil</span>
+
+<span class="nv">my-new-ns=&gt;</span> <span class="nv">String</span>
+<span class="nv">java.lang.String</span>
+
+<span class="nv">my-new-ns=&gt;</span> <span class="nv">map</span>
+<span class="o">#</span><span class="nv">&lt;core$map</span> <span class="nv">clojure.core$map</span><span class="o">@</span><span class="mi">47</span><span class="nv">c1bf&gt;</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">ns</span></code> 通常用在程序源码的开头，用于定义命名空间，以及指定要载入的模块：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="p">(</span><span class="kd">ns </span><span class="nv">foo.bar</span>
+    <span class="p">(</span><span class="ss">:refer-clojure</span> <span class="ss">:exclude</span> <span class="p">[</span><span class="nv">ancestors</span> <span class="nv">printf</span><span class="p">])</span>
+    <span class="p">(</span><span class="ss">:require</span> <span class="p">(</span><span class="nf">clojure.contrib</span> <span class="nv">sql</span> <span class="nv">combinatorics</span><span class="p">))</span>
+    <span class="p">(</span><span class="ss">:use</span> <span class="p">(</span><span class="nf">my.lib</span> <span class="nv">this</span> <span class="nv">that</span><span class="p">))</span>
+    <span class="p">(</span><span class="ss">:import</span> <span class="p">(</span><span class="nf">java.util</span> <span class="nv">Date</span> <span class="nv">Timer</span> <span class="nv">Random</span><span class="p">)</span>
+             <span class="p">(</span><span class="nf">java.sql</span> <span class="nv">Connection</span> <span class="nv">Statement</span><span class="p">)))</span>
+</pre></div>
+</div>
+<p>对于 REPL 环境，创建命名空间最好使用 <code class="docutils literal"><span class="pre">in-ns</span></code> ，它只载入 <code class="docutils literal"><span class="pre">java.lang</span></code> 中的所有类，这样就可以最大限度地避免函数重名：</p>
+<div class="highlight-clojure"><div class="highlight"><pre>my-new-ns=&gt; (in-ns &#39;hello-moto)
+#&lt;Namespace hello-moto&gt;
+
+hello-moto=&gt; String
+java.lang.String
+
+hello-moto=&gt; map    ; 不包含 clojure.core
+CompilerException java.lang.RuntimeException: Unable to resolve symbol: map in this context, compiling:(NO_SOURCE_PATH:0)
+</pre></div>
+</div>
+</div>
+<div class="section" id="require">
+<h2>require<a class="headerlink" href="#require" title="Permalink to this headline">¶</a></h2>
+<p>载入包，但是并不将包中的符号加入到当前命名空间的映射当中。</p>
+<p>因此，要使用被载入的包里面的符号，需要使用完整符号名(fully qualified name)，如 <code class="docutils literal"><span class="pre">package_name/symbol_name</span></code> 。</p>
+<div class="highlight-clojure"><div class="highlight"><pre>user=&gt; (require &#39;clojure.set)
+nil
+
+; 使用 fully qualified 格式引用包中的名字
+user=&gt; (clojure.set/intersection #{1 2 3} #{3 2 1})
+#{1 2 3}
+
+; 证实 clojure.set 里的名字没有加入到当前映射当中
+user=&gt; (intersection #{1 2 3} #{3 2 1})
+CompilerException java.lang.RuntimeException: Unable to resolve symbol: intersection in this context, compiling:(NO_SOURCE_PATH:5)
+</pre></div>
+</div>
+<p>选项 <code class="docutils literal"><span class="pre">:as</span></code> 可以为包指定一个别名：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">require</span> <span class="o">&#39;</span><span class="p">[</span><span class="nv">clojure.set</span> <span class="ss">:as</span> <span class="nv">s</span><span class="p">])</span>
+<span class="nv">nil</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">s/intersection</span> <span class="o">#</span><span class="p">{</span><span class="mi">1</span> <span class="mi">2</span> <span class="mi">3</span><span class="p">}</span> <span class="o">#</span><span class="p">{</span><span class="mi">3</span> <span class="mi">2</span> <span class="mi">1</span><span class="p">})</span>
+<span class="o">#</span><span class="p">{</span><span class="mi">1</span> <span class="mi">2</span> <span class="mi">3</span><span class="p">}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">require</span></code> 还提供了以下选项：</p>
+<ul class="simple">
+<li><code class="docutils literal"><span class="pre">:reload</span></code> 强制重载所有已经载入的包。</li>
+<li><code class="docutils literal"><span class="pre">:reload-all</span></code> 强制重载所有已经载入的包，无论是间接还是直接使用 <code class="docutils literal"><span class="pre">use</span></code> 或 <code class="docutils literal"><span class="pre">require</span></code> 载入。</li>
+<li><code class="docutils literal"><span class="pre">:verbose</span></code> 打印载入包的相关信息。</li>
+</ul>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">require</span> <span class="o">&#39;</span><span class="p">[</span><span class="nv">clojure.set</span> <span class="ss">:verbose</span> <span class="nv">true</span><span class="p">])</span>
+<span class="p">(</span><span class="nf">clojure.core/load</span> <span class="s">&quot;/clojure/set&quot;</span><span class="p">)</span>
+<span class="nv">nil</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">require</span> <span class="o">&#39;</span><span class="p">[</span><span class="nv">clojure.set</span> <span class="ss">:reload</span> <span class="nv">true</span> <span class="ss">:verbose</span> <span class="nv">true</span><span class="p">])</span>
+<span class="p">(</span><span class="nf">clojure.core/load</span> <span class="s">&quot;/clojure/set&quot;</span><span class="p">)</span>
+<span class="nv">nil</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="refer">
+<h2>refer<a class="headerlink" href="#refer" title="Permalink to this headline">¶</a></h2>
+<p>将包中的符号加入到当前命名空间当中，被指定的包必须先使用 <code class="docutils literal"><span class="pre">require</span></code> 函数载入。</p>
+<p>被载入的符号可以用 unqualified name 格式使用。</p>
+<div class="highlight-clojure"><div class="highlight"><pre>; 试图载入没有被 require 的命名空间，失败
+user=&gt; (refer &#39;clojure.set)
+Exception No namespace: clojure.set  clojure.core/refer (core.clj:3761)
+
+; 先 require 进指定的命名空间
+user=&gt; (require &#39;clojure.set)
+nil
+
+user=&gt; (clojure.set/intersection #{1 2 3} #{3 2 1})
+#{1 2 3}
+
+; 再进行 refer
+user=&gt; (refer &#39;clojure.set)
+nil
+
+; 现在可以用 unqualified 格式直接使用 clojure.set 中的名字了
+user=&gt; (intersection #{1 2 3} #{3 2 1})
+#{1 2 3}
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">refer</span></code> 提供了以下选项：</p>
+<ul class="simple">
+<li><code class="docutils literal"><span class="pre">:exclude</span></code> ：一个符号列表，包含不加入到映射的符号名。</li>
+<li><code class="docutils literal"><span class="pre">:only</span></code> ：一个符号列表，包含要被加入到映射的符号名。</li>
+<li><code class="docutils literal"><span class="pre">:rename</span></code> ：一个符号 map ，指定要改名的符号名。</li>
+</ul>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">require</span> <span class="ss">&#39;clojure.set</span><span class="p">)</span>
+<span class="nv">nil</span>
+
+<span class="c1">; 载入 intersection 符号并将它改名成 inter</span>
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">refer </span><span class="ss">&#39;clojure.set</span> <span class="ss">:only</span> <span class="o">&#39;</span><span class="p">[</span><span class="nv">intersection</span><span class="p">]</span> <span class="ss">:rename</span> <span class="p">{</span><span class="ss">&#39;intersection</span> <span class="ss">&#39;inter</span><span class="p">})</span>
+<span class="nv">nil</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">inter</span> <span class="o">#</span><span class="p">{</span><span class="mi">1</span> <span class="mi">2</span> <span class="mi">3</span><span class="p">}</span> <span class="o">#</span><span class="p">{</span><span class="mi">3</span> <span class="mi">2</span> <span class="mi">1</span><span class="p">})</span>
+<span class="o">#</span><span class="p">{</span><span class="mi">1</span> <span class="mi">2</span> <span class="mi">3</span><span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="use">
+<h2>use<a class="headerlink" href="#use" title="Permalink to this headline">¶</a></h2>
+<p>载入包和包中所有公开（public）的符号，之后可以使用 fully qualified name 或 unqualified 两种格式来引用被载入的符号。</p>
+<p>效果类似于同时使用 <code class="docutils literal"><span class="pre">require</span></code> 函数和 <code class="docutils literal"><span class="pre">refer</span></code> 函数。</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">use</span> <span class="ss">&#39;clojure.set</span><span class="p">)</span>
+<span class="nv">nil</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">intersection </span><span class="o">#</span><span class="p">{</span><span class="mi">1</span> <span class="mi">2</span> <span class="mi">3</span><span class="p">}</span> <span class="o">#</span><span class="p">{</span><span class="mi">3</span> <span class="mi">2</span> <span class="mi">1</span><span class="p">})</span>
+<span class="o">#</span><span class="p">{</span><span class="mi">1</span> <span class="mi">2</span> <span class="mi">3</span><span class="p">}</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">clojure.set/intersection</span> <span class="o">#</span><span class="p">{</span><span class="mi">1</span> <span class="mi">2</span> <span class="mi">3</span><span class="p">}</span> <span class="o">#</span><span class="p">{</span><span class="mi">3</span> <span class="mi">2</span> <span class="mi">1</span><span class="p">})</span>
+<span class="o">#</span><span class="p">{</span><span class="mi">1</span> <span class="mi">2</span> <span class="mi">3</span><span class="p">}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">require</span></code> 函数和 <code class="docutils literal"><span class="pre">refer</span></code> 函数的选项都适用于 <code class="docutils literal"><span class="pre">use</span></code> 函数。</p>
+</div>
+<div class="section" id="import">
+<h2>import<a class="headerlink" href="#import" title="Permalink to this headline">¶</a></h2>
+<p><code class="docutils literal"><span class="pre">import</span></code> 载入给定的 JAVA 类：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">import </span><span class="nv">java.util.Date</span><span class="p">)</span>
+<span class="nv">java.util.Date</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">str </span><span class="p">(</span><span class="nf">Date.</span><span class="p">))</span>    <span class="c1">; 创建一个 Date 实例并打印它</span>
+<span class="s">&quot;Thu Oct 11 14:30:31 CST 2012&quot;</span>
+</pre></div>
+</div>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">命名空间</a><ul>
+<li><a class="reference internal" href="#id2">带前缀和不带前缀的名字</a></li>
+<li><a class="reference internal" href="#id3">创建命名空间</a></li>
+<li><a class="reference internal" href="#require">require</a></li>
+<li><a class="reference internal" href="#refer">refer</a></li>
+<li><a class="reference internal" href="#use">use</a></li>
+<li><a class="reference internal" href="#import">import</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="condition.html"
+                        title="previous chapter">条件求值</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="multimethod.html"
+                        title="next chapter">多态方法</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

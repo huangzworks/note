@@ -1,0 +1,247 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>第 2 章：传输层：TCP 、 UDP 和 SCTP &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="up" title="《Unix 网络编程》笔记" href="index.html" />
+    <link rel="next" title="第 3 章：套接字编程简介" href="chp3.html" />
+    <link rel="prev" title="第 1 章：简介" href="chp1.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="chp3.html" title="第 3 章：套接字编程简介"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="chp1.html" title="第 1 章：简介"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">《Unix 网络编程》笔记</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="tcp-udp-sctp">
+<h1>第 2 章：传输层：TCP 、 UDP 和 SCTP<a class="headerlink" href="#tcp-udp-sctp" title="Permalink to this headline">¶</a></h1>
+<p>本章介绍的<strong>传输层</strong>包括：</p>
+<ul class="simple">
+<li>UDP ：简单、不可靠的数据报协议</li>
+<li>TCP ：复杂、可靠的字节流协议</li>
+<li>SCTP ：和 TCP 一样，是一个可靠的传输协议，但它还提供消息边界、传输级别多宿（multihoming）支持，以及将头端阻塞（head-of-line blocking）减少到最小的一种方法。</li>
+</ul>
+<p>以上协议层都转而使用<strong>网络层</strong>协议 IP ，或是 IPv4 ，或是 IPv6 ：</p>
+<img alt="../../_images/protocol.png" src="../../_images/protocol.png" />
+<div class="section" id="id1">
+<h2>协议简介<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="ipv4">
+<h3>IPv4<a class="headerlink" href="#ipv4" title="Permalink to this headline">¶</a></h3>
+<p>全名：网际协议版本 4 （Internet Protocol version 4）。</p>
+<ul class="simple">
+<li>自 80 年代早期以来的主要网际协议。</li>
+<li>使用 32 位地址。</li>
+<li>为 TCP 、 UDP 、 SCTP 、 ICMP 和 IGMP 提供分组递送服务。</li>
+</ul>
+</div>
+<div class="section" id="ipv6">
+<h3>IPv6<a class="headerlink" href="#ipv6" title="Permalink to this headline">¶</a></h3>
+<p>全名：网际协议版本 6 （Internet Protocol version 6).</p>
+<ul class="simple">
+<li>20 世纪 90 年代中期作为 IPv4 的替代品而设计。</li>
+<li>使用 128 位地址，以应对网络的爆发性增长。</li>
+<li>为 TCP 、 UDP 、 SCTP 和 ICMPv6 提供分组递送服务。</li>
+</ul>
+</div>
+<div class="section" id="udp">
+<h3>UDP<a class="headerlink" href="#udp" title="Permalink to this headline">¶</a></h3>
+<p>全名：用户数据报协议（User Datagram Protocol）。</p>
+<ul class="simple">
+<li>一种无连接协议。</li>
+<li>UDP 套接字是一种数据报套接字。</li>
+<li>UDP 数据报不能保证最终到达它们的目的地。</li>
+<li>和 TCP 一样，既可以用 IPv4 也可以用 IPv6 。</li>
+</ul>
+</div>
+<div class="section" id="sctp">
+<h3>SCTP<a class="headerlink" href="#sctp" title="Permalink to this headline">¶</a></h3>
+<p>全名：流控制传输协议（Stream Control Transmission Protocol）。</p>
+<ul class="simple">
+<li>提供可靠全双工关联的面向连接的协议。</li>
+<li>提供消息服务，也就是维护来自应用层的记录边界。</li>
+<li>既可以用 IPv4 也可以用 IPv6 ，而且能够在同一个关联中同时使用它们。</li>
+</ul>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p>关联</p>
+<p class="last">我们使用关联一词来指称 SCTP 中的链接，
+因为 SCTP 是多宿的，
+从而每个关联的两端涉及一组 IP 地址和一个端口号。</p>
+</div>
+</div>
+<div class="section" id="id2">
+<h3>更多其他协议<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h3>
+<p>书本还介绍了 ICMP 、 IGMP 、ARP 等协议，
+具体参考书本。</p>
+</div>
+</div>
+<div class="section" id="id3">
+<h2>UDP 协议<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<p>从创建到发送 UDP 包的过程如下：</p>
+<ol class="arabic simple">
+<li>应用程序往 UDP 套接字写域一个消息</li>
+<li>消息被封装到一个 UDP 数据报</li>
+<li>UDP 数据报又被封装到一个 IP 数据报</li>
+<li>将 IP 送据报发送至目的地</li>
+</ol>
+<p>UDP 协议的特点：</p>
+<ul class="simple">
+<li>不保证 UDP 数据报会到达其最终目的地</li>
+<li>不保证各个数据报的先后顺序跨网络后保持不变</li>
+<li>不保证每个数据报只到达一次</li>
+<li>每个 UDP 数据报都有一个长度</li>
+<li>提供无连接服务： UDP 客户和服务器之间不必存在任何长期关系。</li>
+</ul>
+<p>缺点 —— 缺乏可靠性：</p>
+<ul class="simple">
+<li>发送的过程中没有安全保证，出错也不会被源端（source）自动重传</li>
+<li>要确保一个数据报到达目的地，需要添加很多额外的特性</li>
+</ul>
+</div>
+<div class="section" id="tcp">
+<h2>TCP 协议<a class="headerlink" href="#tcp" title="Permalink to this headline">¶</a></h2>
+<p>特点：</p>
+<ul class="simple">
+<li>连接：TCP 客户先与某个给定服务器建立一个连接，再跨该连接与服务器交换数据。</li>
+<li>可靠性：当向另一端发送数据时，要求对端返回一个确认。如果没有收到确认，就重新发送并等待更长事件。TCP 会动态估算客户端和服务器之间的往返时间，知道应该等待多少时间。</li>
+<li>排序：对数据进行排序，以避免数据重复和混乱。</li>
+<li>流量控制：总是告知对端它一次能够接收多少字节，确保发送端发送的数据不会使接收缓冲区溢出。</li>
+<li>全双工：在一个给定的连接上，应用可以在任何时刻，在进出两个方向上既发送数据又接收数据。</li>
+</ul>
+</div>
+<div class="section" id="id4">
+<h2>SCTP<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h2>
+<p>特点：</p>
+<ul class="simple">
+<li>在客户端和服务器之间提供关联：使用关联(association)而不是连接(connection)，是因为一个关联指代两个系统之间的一次通讯，它可能因为 SCTP 支持多宿而设计不止两个地址。</li>
+<li>面向消息：提供按序投递服务。和 UDP 一样，由发送端写入每条记录的长度，并随数据一同传递给接收端。</li>
+<li>在端点之间提供多个流：每个流各自可靠地按序递送消息。一个流上某个消息的丢失不会阻塞同意关联其他流上的信息投递（TCP 在单个字节流中任何位置的字节丢失都将阻塞该连接上的所有数据的递送，直到该丢失数据被修复为止）。</li>
+<li>多宿：单个 SCTP 端点能够支持多个 IP 地址，可以通过切换地址来避免故障，增强健壮性。</li>
+</ul>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">第 2 章：传输层：TCP 、 UDP 和 SCTP</a><ul>
+<li><a class="reference internal" href="#id1">协议简介</a><ul>
+<li><a class="reference internal" href="#ipv4">IPv4</a></li>
+<li><a class="reference internal" href="#ipv6">IPv6</a></li>
+<li><a class="reference internal" href="#udp">UDP</a></li>
+<li><a class="reference internal" href="#sctp">SCTP</a></li>
+<li><a class="reference internal" href="#id2">更多其他协议</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#id3">UDP 协议</a></li>
+<li><a class="reference internal" href="#tcp">TCP 协议</a></li>
+<li><a class="reference internal" href="#id4">SCTP</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="chp1.html"
+                        title="previous chapter">第 1 章：简介</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="chp3.html"
+                        title="next chapter">第 3 章：套接字编程简介</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

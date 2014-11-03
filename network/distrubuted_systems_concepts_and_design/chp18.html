@@ -1,0 +1,207 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>第 18 章：复制（REPLICATION） &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="up" title="《DISTRIBUTED SYSTEMS Concepts and Design》笔记" href="index.html" />
+    <link rel="next" title="《Pattern-Oriented Software Architecture, Volume 4： A Pattern Langauge for Distributed Computing》笔记" href="../posav4/index.html" />
+    <link rel="prev" title="《DISTRIBUTED SYSTEMS Concepts and Design》笔记" href="index.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../posav4/index.html" title="《Pattern-Oriented Software Architecture, Volume 4： A Pattern Langauge for Distributed Computing》笔记"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="《DISTRIBUTED SYSTEMS Concepts and Design》笔记"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">《DISTRIBUTED SYSTEMS Concepts and Design》笔记</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="replication">
+<h1>第 18 章：复制（REPLICATION）<a class="headerlink" href="#replication" title="Permalink to this headline">¶</a></h1>
+<p>Replication &#8211; maintenance of copies of data at multiple computers:</p>
+<ul class="simple">
+<li>key to the effectiveness of distributed systems</li>
+<li>provide enhanced performance, high availability and fault tolerance</li>
+<li>used widely, e.g. local web caching, DNS naming, etc.</li>
+<li>a technique for enhancing services</li>
+</ul>
+<div class="section" id="motivations">
+<h2>Motivations<a class="headerlink" href="#motivations" title="Permalink to this headline">¶</a></h2>
+<p>Motivations for replication include:</p>
+<div class="section" id="performance-enhancement">
+<h3>Performance enhancement<a class="headerlink" href="#performance-enhancement" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>replication of immutable data is trivial:it increases performance with little cost to the system</li>
+<li>replication of changing data incurs overheads in the form of protocols degined to ensure that clients receive up-to-date data: this limites to the effectiveness of replication as a performance-enhancement technique.</li>
+</ul>
+</div>
+<div class="section" id="increased-availability">
+<h3>Increased availability<a class="headerlink" href="#increased-availability" title="Permalink to this headline">¶</a></h3>
+<p>Apart from delays due to pessimistic concurrency control conflicts (due to data locking), the factors that are relevant to high availability are:</p>
+<ul class="simple">
+<li>server failures<ul>
+<li>replication is a technique for automatically maintaining the availability of data despite server failures</li>
+<li>if data are replicated at two or more failure-independent servers, then client sofrware may be able to access data at an alternative server when the default server fail or become unreachable.</li>
+<li>the percentage of time during which the SERVICE is available can be enhanced by replicating server data</li>
+<li>if each of n servers has an independent probability p of failing or becoming unreachable, then the availability of an object stored at each of these servers is : <img class="math" src="../../_images/math/8f70fac7f14df0117a65698fc861e2e0e81e8063.png" alt="1 - p^n"/></li>
+</ul>
+</li>
+<li>network partitions and disconnected operation<ul>
+<li>user need to working in a disconnected environment</li>
+<li>often prepare by copying heavily used data, such as the contents of a shared diary, from their usual environment to the laptop or mobile phone</li>
+<li>when the user consults or updates the data, they risk reading data that someone else has altered in the meantime</li>
+<li>disconnected working is ONLY feasible if the user (or the application on the user&#8217;s behalf) can cope with stale data and can later reslove any conflicts that arise</li>
+</ul>
+</li>
+</ul>
+</div>
+<div class="section" id="fault-tolerance">
+<h3>Fault tolerance<a class="headerlink" href="#fault-tolerance" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>high available data is NOT necessarily strictly correct data, it may be out of date, incomplete, or have some kind of error, etc.</li>
+<li>a fault-tolerant service, by contrast, ALWAYS guarantees strictly correct behaviour despite a certain number and type of faults.</li>
+<li>the correctness concerns :<ul>
+<li>the freshness of data supplied to the client, and</li>
+<li>the effects of the client&#8217;s operations upon the data,</li>
+<li>sometimes also concerns the timeliness of the service&#8217;s responses.</li>
+</ul>
+</li>
+<li>the same basic technique used for high availability &#8211; that of replicating data and functionality between computes &#8211; is also applicable for achieving fault tolerance:<ul>
+<li>more replication server, higher availability</li>
+<li>but system must manage the coordination of its components precisely to maintain the correctness guarantees in the face of failures, which may occur at any time.</li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<div class="section" id="requirement">
+<h2>Requirement<a class="headerlink" href="#requirement" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li>replication transparency:<ul>
+<li>clients should not normally have to be aware that MULTIPLE PHYSICAL copies of data exists.</li>
+<li>as far as clients are concerned, data are organized as INDIVIDUAL LOGICAL objects and they identify ONLY ONE item in each case when they request an operation to be performed.</li>
+<li>clients expect operations to return ONLY ONE set of values.</li>
+</ul>
+</li>
+<li>consistency (can be vary in strength between applications): concerns wherther the operations performed upon a collection of replicaed objects produce result that meet the spcification of correctness for those objects.</li>
+</ul>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">第 18 章：复制（REPLICATION）</a><ul>
+<li><a class="reference internal" href="#motivations">Motivations</a><ul>
+<li><a class="reference internal" href="#performance-enhancement">Performance enhancement</a></li>
+<li><a class="reference internal" href="#increased-availability">Increased availability</a></li>
+<li><a class="reference internal" href="#fault-tolerance">Fault tolerance</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#requirement">Requirement</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="index.html"
+                        title="previous chapter">《DISTRIBUTED SYSTEMS Concepts and Design》笔记</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="../posav4/index.html"
+                        title="next chapter">《Pattern-Oriented Software Architecture, Volume 4： A Pattern Langauge for Distributed Computing》笔记</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

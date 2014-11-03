@@ -1,0 +1,286 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>并发与并行 &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="up" title="Clojure" href="index.html" />
+    <link rel="next" title="引用类型" href="reference-type.html" />
+    <link rel="prev" title="协议" href="protocol.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="reference-type.html" title="引用类型"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="protocol.html" title="协议"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Clojure</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>并发与并行<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="id2">
+<h2>延时计算<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>使用 <code class="docutils literal"><span class="pre">delay</span></code> 包裹一个给定的表达式，并产生一个延时对象。</p>
+<p>当使用 <code class="docutils literal"><span class="pre">deref</span></code> 或者 <code class="docutils literal"><span class="pre">&#64;</span></code> 对这个延时对象进行解引用时，被包裹的表达式才会被求值：</p>
+<div class="highlight-clojure"><div class="highlight"><pre>user=&gt; (def d (delay (println &quot;Running...&quot;) :done!))
+#&#39;user/d
+
+user=&gt; d                    ; 未求值的 delay
+#&lt;Delay@4f6e03: :pending&gt;
+
+user=&gt; @d                   ; 解引用，等同于调用 (deref d)
+Running...
+:done!
+
+user=&gt; @d                   ; 值被求值一次之后就会被缓存
+:done!
+</pre></div>
+</div>
+<p>因为并不对被包裹的表达式进行求值，所以对 <code class="docutils literal"><span class="pre">delay</span></code> 语句的调用总是立即被返回。</p>
+<p>使用 <code class="docutils literal"><span class="pre">realized?</span></code> 可以检查一个 <code class="docutils literal"><span class="pre">delay</span></code> 是否已经被解引用过：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="k">def </span><span class="nv">dd</span> <span class="p">(</span><span class="nf">delay</span> <span class="ss">:done!</span><span class="p">))</span>
+<span class="o">#</span><span class="ss">&#39;user/dd</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">realized?</span> <span class="nv">dd</span><span class="p">)</span>
+<span class="nv">false</span>
+
+<span class="nv">user=&gt;</span> <span class="o">@</span><span class="nv">dd</span>
+<span class="ss">:done!</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">realized?</span> <span class="nv">dd</span><span class="p">)</span>
+<span class="nv">true</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id3">
+<h2>并发线程<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<p><code class="docutils literal"><span class="pre">future</span></code> 将给定的表达式放到一个线程里执行，执行的结果使用解引用取出：</p>
+<div class="highlight-clojure"><div class="highlight"><pre>user=&gt; (def f (future 10086))
+#&#39;user/f
+
+user=&gt; f
+#&lt;core$future_call$reify__6110@4d6d4e: 10086&gt;
+
+user=&gt; @f
+10086
+</pre></div>
+</div>
+<p>解引用是否阻塞，取决于所给定的表达式在新线程里是否已经运行完毕。</p>
+<p>比如以下代码就会阻塞几秒钟，因为它创建了一个会阻塞的表达式，并且<strong>立即</strong>对它进行解引用：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="o">@</span><span class="p">(</span><span class="nf">future</span> <span class="p">(</span><span class="nf">Thread/sleep</span> <span class="mi">5000</span><span class="p">)</span> <span class="mi">10086</span><span class="p">)</span>  <span class="c1">; ... 需要等待 5 秒</span>
+<span class="mi">10086</span>
+</pre></div>
+</div>
+<p>不论被包裹表达式是否阻塞，对 <code class="docutils literal"><span class="pre">future</span></code> 的调用总是立即返回的，调用者的线程并不会因为 <code class="docutils literal"><span class="pre">future</span></code> 所包裹的表达式而阻塞。</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">为了进一步优化效率，被 <code class="docutils literal"><span class="pre">future</span></code> 包裹的表达式会被放到一个线程池里执行，而不是直接创建新线程。</p>
+</div>
+</div>
+<div class="section" id="id4">
+<h2>数据流变量<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h2>
+<p><code class="docutils literal"><span class="pre">promise</span></code> 声明某个变量为一个数据流变量，表示这个变量『会在将来的某个时候拥有一个值』。</p>
+<p>带 <code class="docutils literal"><span class="pre">promise</span></code> 的变量的值通过 <code class="docutils literal"><span class="pre">deliver</span></code> 来设置。</p>
+<div class="highlight-clojure"><div class="highlight"><pre>user=&gt; (def p (promise))
+#&#39;user/p
+
+user=&gt; p
+#&lt;core$promise$reify__6153@638273: :pending&gt;
+
+user=&gt; (deliver p 10086)
+#&lt;core$promise$reify__6153@638273: 10086&gt;
+
+user=&gt; @p
+10086
+</pre></div>
+</div>
+<p>当对一个未有值的 <code class="docutils literal"><span class="pre">promise</span></code> 变量进行求值时，当前线程会被阻塞，直到有其他线程对这个变量进行 <code class="docutils literal"><span class="pre">deliver</span></code> 为止。</p>
+</div>
+<div class="section" id="id5">
+<h2>并行<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h2>
+<p>使用线程，将计算任务分配到多个内核上并行执行，从而加快计算速度。</p>
+<div class="section" id="pmap">
+<h3>pmap<a class="headerlink" href="#pmap" title="Permalink to this headline">¶</a></h3>
+<p><code class="docutils literal"><span class="pre">map</span></code> 函数的并行版本。</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="c1">; 串行运行， 4 个元素，每个等待 3 秒，共等待 12 秒</span>
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">time</span>
+         <span class="p">(</span><span class="nf">dorun</span>
+           <span class="p">(</span><span class="nb">map </span><span class="p">(</span><span class="k">fn </span><span class="p">[</span><span class="nv">x</span><span class="p">]</span> <span class="p">(</span><span class="nf">Thread/sleep</span> <span class="mi">3000</span><span class="p">))</span>
+                <span class="p">(</span><span class="nb">range </span><span class="mi">4</span><span class="p">))))</span>
+<span class="s">&quot;Elapsed time: 12000.767484 msecs&quot;</span>
+<span class="nv">nil</span>
+
+<span class="c1">; 并行运行， 4 个元素，每个等待 3 秒，共等待 3 秒</span>
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">time</span>
+         <span class="p">(</span><span class="nf">dorun</span>
+           <span class="p">(</span><span class="nf">pmap</span> <span class="p">(</span><span class="k">fn </span><span class="p">[</span><span class="nv">x</span><span class="p">]</span> <span class="p">(</span><span class="nf">Thread/sleep</span> <span class="mi">3000</span><span class="p">))</span>
+                 <span class="p">(</span><span class="nb">range </span><span class="mi">4</span><span class="p">))))</span>
+<span class="s">&quot;Elapsed time: 3002.602211 msecs&quot;</span>
+<span class="nv">nil</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">pmap</span></code> 使用 <code class="docutils literal"><span class="pre">future</span></code> 实现，所以会产生一些和线程有关的消耗，如果要处理的操作并不耗时，就不要使用 <code class="docutils literal"><span class="pre">pmap</span></code> ，否则反而会影响性能。</p>
+</div>
+<div class="section" id="pcalls">
+<h3>pcalls<a class="headerlink" href="#pcalls" title="Permalink to this headline">¶</a></h3>
+<p>并行运行多个无参数函数，并以惰性序列的形式返回它们的值。</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="c1">; 并行运行 3 个等待 3 秒的线程，共等待 3 秒</span>
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">pcalls</span>
+         <span class="o">#</span><span class="p">(</span><span class="nf">Thread/sleep</span> <span class="mi">3000</span><span class="p">)</span>
+         <span class="o">#</span><span class="p">(</span><span class="nf">Thread/sleep</span> <span class="mi">3000</span><span class="p">)</span>
+         <span class="o">#</span><span class="p">(</span><span class="nf">Thread/sleep</span> <span class="mi">3000</span><span class="p">))</span>
+<span class="p">(</span><span class="nf">nil</span> <span class="nv">nil</span> <span class="nv">nil</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="pvalues">
+<h3>pvalues<a class="headerlink" href="#pvalues" title="Permalink to this headline">¶</a></h3>
+<p>并行对多个表达式进行求值，并以惰性序列的形式返回它们的值。</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="c1">; 以下多个表达式的最大求值时间为 3 秒</span>
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">pvalues</span>
+         <span class="p">(</span><span class="nf">Thread/sleep</span> <span class="mi">3000</span><span class="p">)</span>
+         <span class="mi">10086</span>
+         <span class="p">(</span><span class="nf">Thread/sleep</span> <span class="mi">3000</span><span class="p">)</span>
+         <span class="s">&quot;hello moto&quot;</span><span class="p">)</span>
+<span class="p">(</span><span class="nf">nil</span> <span class="mi">10086</span> <span class="nv">nil</span> <span class="s">&quot;hello moto&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p>因为 <code class="docutils literal"><span class="pre">pcalls</span></code> 和 <code class="docutils literal"><span class="pre">pvalues</span></code> 的返回值都是惰性序列，因此，如果有一个非常耗时的表达式阻塞在其他一些表达式的前面，那么就算这些表达式已经计算完了，它们也不能被返回。</p>
+<p>以下是这样一个实例，在序列前面的三个元素，可以立即被返回，但是，后面的三个元素只有等待 <code class="docutils literal"><span class="pre">3</span></code> 秒之后，才会被返回，尽管它们早就在并发线程里被求值完了：</p>
+<div class="last highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">for </span><span class="p">[</span><span class="nv">i</span> <span class="p">(</span><span class="nf">pvalues</span> <span class="mi">1</span> <span class="mi">2</span> <span class="mi">3</span> <span class="p">(</span><span class="nf">Thread/sleep</span> <span class="mi">3000</span><span class="p">)</span> <span class="mi">4</span> <span class="mi">5</span> <span class="mi">6</span><span class="p">)]</span> <span class="p">(</span><span class="nb">println </span><span class="nv">i</span><span class="p">))</span>
+<span class="p">(</span><span class="mi">1</span>
+<span class="mi">2</span>
+<span class="nv">nil</span> <span class="mi">3</span>    <span class="c1">; 打印出这里之后，会停滞 3 秒</span>
+<span class="nv">nil</span> <span class="nv">nil</span>
+<span class="nv">nil</span> <span class="mi">4</span>
+<span class="nv">nil</span> <span class="mi">5</span>
+<span class="nv">nil</span> <span class="mi">6</span>
+<span class="nv">nil</span> <span class="nv">nil</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">并发与并行</a><ul>
+<li><a class="reference internal" href="#id2">延时计算</a></li>
+<li><a class="reference internal" href="#id3">并发线程</a></li>
+<li><a class="reference internal" href="#id4">数据流变量</a></li>
+<li><a class="reference internal" href="#id5">并行</a><ul>
+<li><a class="reference internal" href="#pmap">pmap</a></li>
+<li><a class="reference internal" href="#pcalls">pcalls</a></li>
+<li><a class="reference internal" href="#pvalues">pvalues</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="protocol.html"
+                        title="previous chapter">协议</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="reference-type.html"
+                        title="next chapter">引用类型</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

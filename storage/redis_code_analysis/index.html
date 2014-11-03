@@ -1,0 +1,223 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Redis 源码分析 &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="next" title="双链表" href="adlist.html" />
+    <link rel="prev" title="字符串对象 RString" href="../../language/mruby-code-analysis/string.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="adlist.html" title="双链表"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="../../language/mruby-code-analysis/string.html" title="字符串对象 RString"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="redis">
+<h1>Redis 源码分析<a class="headerlink" href="#redis" title="Permalink to this headline">¶</a></h1>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="adlist.html">双链表</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="adlist.html#id2">数据结构</a></li>
+<li class="toctree-l2"><a class="reference internal" href="adlist.html#list-listnode-api">list 结构和 listNode 结构的 API</a></li>
+<li class="toctree-l2"><a class="reference internal" href="adlist.html#id3">迭代器</a></li>
+<li class="toctree-l2"><a class="reference internal" href="adlist.html#id5">小结</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="dict.html">字典</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="dict.html#id2">字典实现的数据结构</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dict.html#id3">创建字典</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dict.html#id4">哈希表链表的创建流程</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dict.html#id5">字典的扩展，以及 1 号哈希表的创建</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dict.html#rehash">渐进式 rehash ，以及平摊操作</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dict.html#id6">哈希表的大小</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dict.html#id7">小结</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="sds.html">SDS 结构</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="sds.html#id1">数据类型定义</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sds.html#sdshdr-sds">将 sdshdr 用作 sds</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sds.html#id2">函数实现</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sds.html#id4">结语</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sds.html#id5">参考资料</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="lua-scripting.html">Lua 脚本</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="lua-scripting.html#id1">预备知识</a></li>
+<li class="toctree-l2"><a class="reference internal" href="lua-scripting.html#id2">脚本功能的实现</a></li>
+<li class="toctree-l2"><a class="reference internal" href="lua-scripting.html#lua-redis">Lua 嵌入 Redis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="lua-scripting.html#eval-evalsha">EVAL 和 EVALSHA 命令的实现</a></li>
+<li class="toctree-l2"><a class="reference internal" href="lua-scripting.html#id14">诶，等等，先等等！</a></li>
+<li class="toctree-l2"><a class="reference internal" href="lua-scripting.html#script">SCRIPT 命令的实现</a></li>
+<li class="toctree-l2"><a class="reference internal" href="lua-scripting.html#id15">搞定！</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="event-driven.html">事件驱动</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="event-driven.html#id4">事件状态</a></li>
+<li class="toctree-l2"><a class="reference internal" href="event-driven.html#id5">文件事件</a></li>
+<li class="toctree-l2"><a class="reference internal" href="event-driven.html#id6">时间事件</a></li>
+<li class="toctree-l2"><a class="reference internal" href="event-driven.html#id7">事件处理器</a></li>
+<li class="toctree-l2"><a class="reference internal" href="event-driven.html#id8">多个多路复用库可选</a></li>
+<li class="toctree-l2"><a class="reference internal" href="event-driven.html#id10">总结</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="pubsub.html">发布/订阅</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="pubsub.html#id2">订阅、发布和退订</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pubsub.html#id3">发布和订阅机制</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pubsub.html#id4">SUBSCRIBE 命令的实现</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pubsub.html#id5">PSUBSCRIBE 命令的实现</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pubsub.html#id6">PUBLISH 命令的实现</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pubsub.html#unsubscribe-punsubscribe">UNSUBSCRIBE 和 PUNSUBSCRIBE 的实现</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pubsub.html#id7">小节</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="transaction.html">事务</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="transaction.html#redis">Redis 的事务</a></li>
+<li class="toctree-l2"><a class="reference internal" href="transaction.html#id2">MULTI 命令</a></li>
+<li class="toctree-l2"><a class="reference internal" href="transaction.html#id3">命令的入队</a></li>
+<li class="toctree-l2"><a class="reference internal" href="transaction.html#id4">执行事务</a></li>
+<li class="toctree-l2"><a class="reference internal" href="transaction.html#id5">取消事务</a></li>
+<li class="toctree-l2"><a class="reference internal" href="transaction.html#id6">小结</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="watch-and-unwatch.html">WATCH 和 UNWATCH</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="watch-and-unwatch.html#watch">WATCH 命令</a></li>
+<li class="toctree-l2"><a class="reference internal" href="watch-and-unwatch.html#id1">与 WATCH 有关的数据结构</a></li>
+<li class="toctree-l2"><a class="reference internal" href="watch-and-unwatch.html#id2">WATCH 数据结构的实现决策</a></li>
+<li class="toctree-l2"><a class="reference internal" href="watch-and-unwatch.html#id3">WATCH 命令的实现</a></li>
+<li class="toctree-l2"><a class="reference internal" href="watch-and-unwatch.html#id4">UNWATCH 命令的实现</a></li>
+<li class="toctree-l2"><a class="reference internal" href="watch-and-unwatch.html#touchwatchedkey-touchwatchedkeysonflush">touchWatchedKey 和 touchWatchedKeysOnFlush 函数</a></li>
+<li class="toctree-l2"><a class="reference internal" href="watch-and-unwatch.html#id5">总结</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="keyspace-notification.html">键空间通知</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="keyspace-notification.html#id3">选择通知的类型</a></li>
+<li class="toctree-l2"><a class="reference internal" href="keyspace-notification.html#id4">通知的发送</a></li>
+<li class="toctree-l2"><a class="reference internal" href="keyspace-notification.html#id7">实例</a></li>
+<li class="toctree-l2"><a class="reference internal" href="keyspace-notification.html#id9">总结</a></li>
+<li class="toctree-l2"><a class="reference internal" href="keyspace-notification.html#id10">扩展阅读</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="pubsub_command.html">PUBSUB 命令</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="pubsub_command.html#pubsub-channels">PUBSUB CHANNELS</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pubsub_command.html#pubsub-numsub">PUBSUB NUMSUB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pubsub_command.html#pubsub-numpat">PUBSUB NUMPAT</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pubsub_command.html#id3">PUBSUB 命令的完整代码</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pubsub_command.html#eof">EOF</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="replication.html">复制（replication）</a></li>
+<li class="toctree-l1"><a class="reference internal" href="sentinel.html">Sentinel</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cluster.html">集群（cluster）</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="cluster.html#cluster-h">cluster.h</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cluster.html#cluster-c">cluster.c</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="../../language/mruby-code-analysis/string.html"
+                        title="previous chapter">字符串对象 RString</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="adlist.html"
+                        title="next chapter">双链表</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

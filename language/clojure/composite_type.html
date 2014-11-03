@@ -1,0 +1,315 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>复合类型 &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="up" title="Clojure" href="index.html" />
+    <link rel="next" title="序列" href="seq.html" />
+    <link rel="prev" title="基本类型" href="basic_type.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="seq.html" title="序列"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="basic_type.html" title="基本类型"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Clojure</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>复合类型<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<p>Clojure 中的复合类型被统称为 collection ，所有 collection 都是不可改（immutable）和持久化（persistent）的。</p>
+<p>所有 collection 都支持 <code class="docutils literal"><span class="pre">count</span></code> 、 <code class="docutils literal"><span class="pre">conj</span></code> 和 <code class="docutils literal"><span class="pre">seq</span></code> 三种操作。 <code class="docutils literal"><span class="pre">count</span></code> 返回 collection 中元素的个数，而 <code class="docutils literal"><span class="pre">conj</span></code> 则将一个新元素添加到 collection 当中， <code class="docutils literal"><span class="pre">seq</span></code> 返回一个 collection 的序列，可以对这个序列进行多种操作；各种符合类型的序列表现稍有不同。</p>
+<p>本章先介绍复合类型，序列在稍后的其他章节会详细介绍。</p>
+<div class="section" id="id2">
+<h2>列表<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>列表通常使用 <code class="docutils literal"><span class="pre">list</span></code> 函数来构建：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="k">def </span><span class="nv">l</span> <span class="p">(</span><span class="nb">list </span><span class="ss">&#39;a</span> <span class="ss">&#39;b</span> <span class="ss">&#39;c</span><span class="p">))</span>
+<span class="o">#</span><span class="ss">&#39;user/l</span>
+
+<span class="nv">user=&gt;</span> <span class="nv">l</span>
+<span class="p">(</span><span class="nf">a</span> <span class="nv">b</span> <span class="nv">c</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>函数 <code class="docutils literal"><span class="pre">peek</span></code> 取出列表的头元素，而 <code class="docutils literal"><span class="pre">pop</span></code> 取出除头元素外的其他元素：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">peek </span><span class="nv">l</span><span class="p">)</span>
+<span class="nv">a</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">pop </span><span class="nv">l</span><span class="p">)</span>
+<span class="p">(</span><span class="nf">b</span> <span class="nv">c</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">conj</span></code> 将一个新元素添加到列表的头部：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">conj </span><span class="nv">l</span> <span class="ss">&#39;alpha</span><span class="p">)</span>
+<span class="p">(</span><span class="nf">alpha</span> <span class="nv">a</span> <span class="nv">b</span> <span class="nv">c</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id3">
+<h2>向量<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<p>向量以下标来索引元素。</p>
+<p>可以用 <code class="docutils literal"><span class="pre">vector</span></code> 函数来创建一个向量：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="k">def </span><span class="nv">v</span> <span class="p">(</span><span class="nb">vector </span><span class="ss">&#39;a</span> <span class="ss">&#39;b</span> <span class="ss">&#39;c</span><span class="p">))</span>
+<span class="o">#</span><span class="ss">&#39;user/v</span>
+
+<span class="nv">user=&gt;</span> <span class="nv">v</span>
+<span class="p">[</span><span class="nv">a</span> <span class="nv">b</span> <span class="nv">c</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>获取向量的元素可以使用 <code class="docutils literal"><span class="pre">get</span></code> 函数，下标从 <code class="docutils literal"><span class="pre">0</span></code> 开始：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">get </span><span class="nv">v</span> <span class="mi">0</span><span class="p">)</span>
+<span class="nv">a</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">get </span><span class="nv">v</span> <span class="mi">1</span><span class="p">)</span>
+<span class="nv">b</span>
+</pre></div>
+</div>
+<p>如果 <code class="docutils literal"><span class="pre">get</span></code> 所传入的下标超出给定向量的下标，那么返回 <code class="docutils literal"><span class="pre">nil</span></code> ：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">get </span><span class="nv">v</span> <span class="mi">10086</span><span class="p">)</span>
+<span class="nv">nil</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">nth</span></code> 和 <code class="docutils literal"><span class="pre">get</span></code> 稍有不同，它在给定下标不存在时返回 <code class="docutils literal"><span class="pre">nil</span></code> ：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">nth </span><span class="nv">v</span> <span class="mi">10086</span><span class="p">)</span>
+<span class="nv">IndexOutOfBoundsException</span>   <span class="nv">clojure.lang.PersistentVector.arrayFor</span> <span class="p">(</span><span class="nf">PersistentVector.java</span><span class="ss">:106</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>要避免 <code class="docutils literal"><span class="pre">nth</span></code> 抛出异常，要显式地指定下标不存在时返回的默认值：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">nth </span><span class="nv">v</span> <span class="mi">10086</span> <span class="nv">nil</span><span class="p">)</span>
+<span class="nv">nil</span>
+</pre></div>
+</div>
+<p>向量本身也可以作为函数来使用：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">v</span> <span class="mi">0</span><span class="p">)</span>
+<span class="nv">a</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">v</span> <span class="mi">1</span><span class="p">)</span>
+<span class="nv">b</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">assoc</span></code> 函数可以用于修改向量的已存在元素，或者添加新元素到向量的最后：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">assoc </span><span class="nv">v</span> <span class="mi">3</span> <span class="ss">&#39;d</span><span class="p">)</span>   <span class="c1">; 索引等于向量的长度时，执行添加操作</span>
+<span class="p">[</span><span class="nv">a</span> <span class="nv">b</span> <span class="nv">c</span> <span class="nv">d</span><span class="p">]</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">assoc </span><span class="nv">v</span> <span class="mi">0</span> <span class="ss">&#39;A</span><span class="p">)</span>   <span class="c1">; 索引小于向量的长度时，执行修改操作</span>
+<span class="p">[</span><span class="nv">A</span> <span class="nv">b</span> <span class="nv">c</span><span class="p">]</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id4">
+<h2>映射<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h2>
+<p>映射（Map）分为哈希映射（hash-map）和有序映射（sorted-map）两种，哈希映射是无序的，而有序映射则按 key 从小到大来排列。</p>
+<p><code class="docutils literal"><span class="pre">hash-map</span></code> 函数用于创建一个哈希映射：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="k">def </span><span class="nv">h</span> <span class="p">(</span><span class="nb">hash-map </span><span class="ss">:k1</span> <span class="s">&quot;value 1&quot;</span> <span class="ss">:k2</span> <span class="s">&quot;value 2&quot;</span><span class="p">))</span>
+<span class="o">#</span><span class="ss">&#39;user/h</span>
+
+<span class="nv">user=&gt;</span> <span class="nv">h</span>
+<span class="p">{</span><span class="ss">:k1</span> <span class="s">&quot;value 1&quot;</span>, <span class="ss">:k2</span> <span class="s">&quot;value 2&quot;</span><span class="p">}</span>
+</pre></div>
+</div>
+<p>映射本身可以作为函数来使用，获取给定 key 所对应的值，如果给定 key 不存在，那么返回 <code class="docutils literal"><span class="pre">nil</span></code> ：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">h</span> <span class="ss">:k1</span><span class="p">)</span>
+<span class="s">&quot;value 1&quot;</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">h</span> <span class="ss">:not-exists-key</span><span class="p">)</span>
+<span class="nv">nil</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">get</span></code> 函数也可以用于获取映射的值：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">get </span><span class="nv">h</span> <span class="ss">:k2</span><span class="p">)</span>
+<span class="s">&quot;value 2&quot;</span>
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">get </span><span class="nv">h</span> <span class="ss">:not-exists-key</span><span class="p">)</span>
+<span class="nv">nil</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">assoc</span></code> 函数用于给映射增加一个或多个 key - value 对：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">assoc </span><span class="p">{</span><span class="ss">:k1</span> <span class="s">&quot;value 1&quot;</span><span class="p">}</span> <span class="ss">:k2</span> <span class="s">&quot;value 2&quot;</span><span class="p">)</span>
+<span class="p">{</span><span class="ss">:k2</span> <span class="s">&quot;value 2&quot;</span>, <span class="ss">:k1</span> <span class="s">&quot;value 1&quot;</span><span class="p">}</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">assoc </span><span class="p">{</span><span class="ss">:k1</span> <span class="s">&quot;value 1&quot;</span><span class="p">}</span> <span class="ss">:k2</span> <span class="s">&quot;value 2&quot;</span> <span class="ss">:k3</span> <span class="s">&quot;value 3&quot;</span><span class="p">)</span>
+<span class="p">{</span><span class="ss">:k3</span> <span class="s">&quot;value 3&quot;</span>, <span class="ss">:k2</span> <span class="s">&quot;value 2&quot;</span>, <span class="ss">:k1</span> <span class="s">&quot;value 1&quot;</span><span class="p">}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">dissoc</span></code> 函数用于从映射中移除一个或多个 key - value 对：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">dissoc </span><span class="p">{</span><span class="ss">:k1</span> <span class="s">&quot;value 1&quot;</span> <span class="ss">:k2</span> <span class="s">&quot;value 2&quot;</span> <span class="ss">:k3</span> <span class="s">&quot;value 3&quot;</span><span class="p">}</span> <span class="ss">:k1</span><span class="p">)</span>
+<span class="p">{</span><span class="ss">:k3</span> <span class="s">&quot;value 3&quot;</span>, <span class="ss">:k2</span> <span class="s">&quot;value 2&quot;</span><span class="p">}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">sorted-map</span></code> 和 <code class="docutils literal"><span class="pre">sorted-map-by</span></code> 两个函数用于创建有序映射。其中 <code class="docutils literal"><span class="pre">sorted-map</span></code> 使用默认的从小到大顺序来对 key 进行排序，而 <code class="docutils literal"><span class="pre">sorted-map-by</span></code> 则需要显式地传入对比操作符（comperator）：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">sorted-map </span><span class="mi">1</span> <span class="ss">:a</span> <span class="mi">2</span> <span class="ss">:b</span> <span class="mi">3</span> <span class="ss">:c</span><span class="p">)</span>
+<span class="p">{</span><span class="mi">1</span> <span class="ss">:a</span>, <span class="mi">2</span> <span class="ss">:b</span>, <span class="mi">3</span> <span class="ss">:c</span><span class="p">}</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">sorted-map-by &gt; </span><span class="mi">1</span> <span class="ss">:a</span> <span class="mi">2</span> <span class="ss">:b</span> <span class="mi">3</span> <span class="ss">:c</span><span class="p">)</span> <span class="c1">; 显式传入 &gt; 号，将排序变为从大到小</span>
+<span class="p">{</span><span class="mi">3</span> <span class="ss">:c</span>, <span class="mi">2</span> <span class="ss">:b</span>, <span class="mi">1</span> <span class="ss">:a</span><span class="p">}</span>
+</pre></div>
+</div>
+<p>映射还有 <code class="docutils literal"><span class="pre">merge</span></code> 、 <code class="docutils literal"><span class="pre">zipmap</span></code> 、 <code class="docutils literal"><span class="pre">contains?</span></code> 和 <code class="docutils literal"><span class="pre">find</span></code> 等常用操作。</p>
+<p>还有一种数组映射（array map），这种映射按照创建的顺序将一个个 key - value 对包含在数组里，主要用于参数传递等映射规模非常小的情况：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">{</span><span class="ss">:a</span> <span class="mi">1</span> <span class="ss">:b</span> <span class="mi">2</span> <span class="ss">:c</span> <span class="mi">3</span><span class="p">}</span>
+<span class="p">{</span><span class="ss">:a</span> <span class="mi">1</span>, <span class="ss">:c</span> <span class="mi">3</span>, <span class="ss">:b</span> <span class="mi">2</span><span class="p">}</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">class </span><span class="p">{</span><span class="ss">:a</span> <span class="mi">1</span> <span class="ss">:b</span> <span class="mi">2</span> <span class="ss">:c</span> <span class="mi">3</span><span class="p">})</span>
+<span class="nv">clojure.lang.PersistentArrayMap</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id5">
+<h2>集合<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h2>
+<p>集合保证自身的每个元素都是唯一的。</p>
+<p>集合分为 <code class="docutils literal"><span class="pre">hash-set</span></code> 和 <code class="docutils literal"><span class="pre">sorted-set</span></code> 两种，它们的关系类似于前面介绍的 <code class="docutils literal"><span class="pre">hash-map</span></code> 和 <code class="docutils literal"><span class="pre">sorted-map</span></code> ：前者是无序的，而后者按元素来排序。</p>
+<p><code class="docutils literal"><span class="pre">hash-set</span></code> 可以通过集合的文法，或者显式调用 <code class="docutils literal"><span class="pre">hash-set</span></code> 来创建：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="o">#</span><span class="p">{</span> <span class="ss">:a</span> <span class="ss">:b</span> <span class="ss">:c</span> <span class="p">}</span>
+<span class="o">#</span><span class="p">{</span><span class="ss">:a</span> <span class="ss">:c</span> <span class="ss">:b</span><span class="p">}</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">class </span><span class="o">#</span><span class="p">{</span> <span class="ss">:a</span> <span class="ss">:b</span> <span class="ss">:c</span> <span class="p">})</span>
+<span class="nv">clojure.lang.PersistentHashSet</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">hash-set </span><span class="ss">:a</span> <span class="ss">:b</span> <span class="ss">:c</span><span class="p">)</span>
+<span class="o">#</span><span class="p">{</span><span class="ss">:a</span> <span class="ss">:c</span> <span class="ss">:b</span><span class="p">}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">conj</span></code> 用于添加元素到集合， <code class="docutils literal"><span class="pre">disj</span></code> 则用于移除集合中的给定元素：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">conj </span><span class="o">#</span><span class="p">{</span><span class="ss">:a</span><span class="p">}</span> <span class="ss">:b</span><span class="p">)</span>
+<span class="o">#</span><span class="p">{</span><span class="ss">:a</span> <span class="ss">:b</span><span class="p">}</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">disj </span><span class="o">#</span><span class="p">{</span><span class="ss">:a</span> <span class="ss">:b</span><span class="p">}</span> <span class="ss">:b</span><span class="p">)</span>
+<span class="o">#</span><span class="p">{</span><span class="ss">:a</span><span class="p">}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">get</span></code> 函数在集合包含给定元素时返回元素本身，如果元素不存在，返回 <code class="docutils literal"><span class="pre">nil</span></code> ：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="k">def </span><span class="nv">s</span> <span class="o">#</span><span class="p">{</span><span class="ss">:a</span> <span class="ss">:b</span> <span class="ss">:c</span><span class="p">})</span>
+<span class="o">#</span><span class="ss">&#39;user/s</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">get </span><span class="nv">s</span> <span class="ss">:a</span><span class="p">)</span>
+<span class="ss">:a</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">get </span><span class="nv">s</span> <span class="ss">:not-exists-element</span><span class="p">)</span>
+<span class="nv">nil</span>
+</pre></div>
+</div>
+<p>获取元素的工作同样可以使用集合本身来进行：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">s</span> <span class="ss">:a</span><span class="p">)</span>
+<span class="ss">:a</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">s</span> <span class="ss">:not-exists-element</span><span class="p">)</span>
+<span class="nv">nil</span>
+</pre></div>
+</div>
+<p>除以上介绍的操作外，集合还支持 <code class="docutils literal"><span class="pre">union</span></code> 、 <code class="docutils literal"><span class="pre">difference</span></code> 和 <code class="docutils literal"><span class="pre">intersection</span></code> 等常用操作。</p>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">复合类型</a><ul>
+<li><a class="reference internal" href="#id2">列表</a></li>
+<li><a class="reference internal" href="#id3">向量</a></li>
+<li><a class="reference internal" href="#id4">映射</a></li>
+<li><a class="reference internal" href="#id5">集合</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="basic_type.html"
+                        title="previous chapter">基本类型</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="seq.html"
+                        title="next chapter">序列</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

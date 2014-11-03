@@ -1,0 +1,447 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>事务 &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="up" title="Redis 源码分析" href="index.html" />
+    <link rel="next" title="WATCH 和 UNWATCH" href="watch-and-unwatch.html" />
+    <link rel="prev" title="发布/订阅" href="pubsub.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="watch-and-unwatch.html" title="WATCH 和 UNWATCH"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="pubsub.html" title="发布/订阅"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Redis 源码分析</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>事务<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<p>通过对 Redis 源码中的 <code class="docutils literal"><span class="pre">multi.c</span></code> 文件进行分析，解释 Redis 事务（transaction）功能的实现原理。</p>
+<div class="section" id="redis">
+<h2>Redis 的事务<a class="headerlink" href="#redis" title="Permalink to this headline">¶</a></h2>
+<p>在开始研究 <code class="docutils literal"><span class="pre">multi.c</span></code> 的源码之前，不妨先来回顾一下 Redis 的事务功能的用法。</p>
+<p>Redis 的事务使用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/multi.html">MULTI 命令</a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/exec.html">EXEC 命令</a> 包围，处在这两条命令之间的一条或多条命令，会以 FIFO 的方式运行：</p>
+<div class="highlight-c"><div class="highlight"><pre>redis&gt; MULTI                         # 标记事务开始
+OK
+
+redis&gt; INCR user_id
+QUEUED
+
+redis&gt; SET greeting &quot;hello moto&quot;
+QUEUED
+
+redis&gt; GET replay
+QUEUED
+
+redis&gt; EXEC                          # 标记事务结束，并执行事务
+1) (integer) 1
+2) OK
+3) &quot;hello world&quot;
+</pre></div>
+</div>
+<p>需要注意的是，Redis 的事务和关系数据库的事务并不一样：Redis 的事务并不保证 <a class="reference external" href="http://zh.wikipedia.org/wiki/ACID">ACID</a> 性质。</p>
+<p>也就是说，在 Redis 事务的执行过程中，因为服务器失败而造成数据不一致的情况是可能存在的，在后面对代码进行分析的时候，就会清晰地看到这一点。</p>
+</div>
+<div class="section" id="id2">
+<h2>MULTI 命令<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>每个 Redis 事务都以 <code class="docutils literal"><span class="pre">MULTI</span></code> 命令开始，而 <code class="docutils literal"><span class="pre">MULTI</span></code> 命令本身的实现则非常简单：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="kt">void</span> <span class="nf">multiCommand</span><span class="p">(</span><span class="n">redisClient</span> <span class="o">*</span><span class="n">c</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="c1">// MULTI 不可以嵌套使用</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">flags</span> <span class="o">&amp;</span> <span class="n">REDIS_MULTI</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">addReplyError</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="s">&quot;MULTI calls can not be nested&quot;</span><span class="p">);</span>
+        <span class="k">return</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">c</span><span class="o">-&gt;</span><span class="n">flags</span> <span class="o">|=</span> <span class="n">REDIS_MULTI</span><span class="p">;</span>    <span class="c1">// 打开 FLAG</span>
+    <span class="n">addReply</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">shared</span><span class="p">.</span><span class="n">ok</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">multiCommand</span></code> 的主要动作就是对 <code class="docutils literal"><span class="pre">redisClient</span></code> 结构的 <code class="docutils literal"><span class="pre">flags</span></code> 进行检查和设置。</p>
+<p>它首先检查 <code class="docutils literal"><span class="pre">flags</span></code> ，确保没有嵌套使用 <code class="docutils literal"><span class="pre">MULTI</span></code> 命令。</p>
+<p>如果检查通过，那么就使用位或操作，将 <code class="docutils literal"><span class="pre">REDIS_MULTI</span></code> 这个 FLAG 打开。</p>
+<p>最后向客户端返回 <code class="docutils literal"><span class="pre">OK</span></code> 。</p>
+</div>
+<div class="section" id="id3">
+<h2>命令的入队<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<p>当 <code class="docutils literal"><span class="pre">REDIS_MULTI</span></code> 这个 FLAG 被打开之后，
+传入 Redis 客户端的命令就不会马上被执行（部分命令如 <code class="docutils literal"><span class="pre">EXEC</span></code> 除外），
+这些未被执行的命令会被 <code class="docutils literal"><span class="pre">queueMultiCommand</span></code> 以 FIFO 的方式放入一个数组里，储存起来。</p>
+<p><code class="docutils literal"><span class="pre">redis.c</span></code> 文件里的 <code class="docutils literal"><span class="pre">processCommand</span></code> 函数说明了这一点：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="kt">int</span> <span class="nf">processCommand</span><span class="p">(</span><span class="n">redisClient</span> <span class="o">*</span><span class="n">c</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// 其他代码 ...</span>
+
+    <span class="cm">/* Exec the command */</span>
+    <span class="c1">// 如果 REDIS_MULTI 被打开</span>
+    <span class="c1">// 且要执行的命令不是 EXEC 、 DISCARD 、 MULTI 或 WATCH</span>
+    <span class="c1">// 那么将这个命令入队</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">flags</span> <span class="o">&amp;</span> <span class="n">REDIS_MULTI</span> <span class="o">&amp;&amp;</span>
+        <span class="n">c</span><span class="o">-&gt;</span><span class="n">cmd</span><span class="o">-&gt;</span><span class="n">proc</span> <span class="o">!=</span> <span class="n">execCommand</span> <span class="o">&amp;&amp;</span> <span class="n">c</span><span class="o">-&gt;</span><span class="n">cmd</span><span class="o">-&gt;</span><span class="n">proc</span> <span class="o">!=</span> <span class="n">discardCommand</span> <span class="o">&amp;&amp;</span>
+        <span class="n">c</span><span class="o">-&gt;</span><span class="n">cmd</span><span class="o">-&gt;</span><span class="n">proc</span> <span class="o">!=</span> <span class="n">multiCommand</span> <span class="o">&amp;&amp;</span> <span class="n">c</span><span class="o">-&gt;</span><span class="n">cmd</span><span class="o">-&gt;</span><span class="n">proc</span> <span class="o">!=</span> <span class="n">watchCommand</span><span class="p">)</span>
+    <span class="p">{</span>
+        <span class="n">queueMultiCommand</span><span class="p">(</span><span class="n">c</span><span class="p">);</span>       <span class="c1">// 入队</span>
+        <span class="n">addReply</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">shared</span><span class="p">.</span><span class="n">queued</span><span class="p">);</span>  <span class="c1">// 返回已入队信息</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="n">call</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">REDIS_CALL_FULL</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">REDIS_OK</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">queueMultiCommand</span></code> 函数将要执行的命令、命令的参数个数以及命令的参数放进 <code class="docutils literal"><span class="pre">multiCmd</span></code> 结构中，并将这个结构保存到 <code class="docutils literal"><span class="pre">redisClient.mstate.command</span></code> 数组的末尾，从而形成一个保存了要执行的命令的 FIFO 队列：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cm">/* Add a new command into the MULTI commands queue */</span>
+<span class="c1">// 添加新命令到 MULTI 的执行队列中（FIFO）</span>
+<span class="kt">void</span> <span class="nf">queueMultiCommand</span><span class="p">(</span><span class="n">redisClient</span> <span class="o">*</span><span class="n">c</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">multiCmd</span> <span class="o">*</span><span class="n">mc</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">j</span><span class="p">;</span>
+
+    <span class="c1">// 为新命令分配储存结构，并放到数组的末尾</span>
+    <span class="n">c</span><span class="o">-&gt;</span><span class="n">mstate</span><span class="p">.</span><span class="n">commands</span> <span class="o">=</span> <span class="n">zrealloc</span><span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">mstate</span><span class="p">.</span><span class="n">commands</span><span class="p">,</span>
+            <span class="k">sizeof</span><span class="p">(</span><span class="n">multiCmd</span><span class="p">)</span><span class="o">*</span><span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">mstate</span><span class="p">.</span><span class="n">count</span><span class="o">+</span><span class="mi">1</span><span class="p">));</span>
+
+    <span class="c1">// 设置新命令</span>
+    <span class="n">mc</span> <span class="o">=</span> <span class="n">c</span><span class="o">-&gt;</span><span class="n">mstate</span><span class="p">.</span><span class="n">commands</span><span class="o">+</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">mstate</span><span class="p">.</span><span class="n">count</span><span class="p">;</span>            <span class="c1">// 指向储存新命令的结构体</span>
+    <span class="n">mc</span><span class="o">-&gt;</span><span class="n">cmd</span> <span class="o">=</span> <span class="n">c</span><span class="o">-&gt;</span><span class="n">cmd</span><span class="p">;</span>                                   <span class="c1">// 设置命令</span>
+    <span class="n">mc</span><span class="o">-&gt;</span><span class="n">argc</span> <span class="o">=</span> <span class="n">c</span><span class="o">-&gt;</span><span class="n">argc</span><span class="p">;</span>                                 <span class="c1">// 设置参数数量</span>
+    <span class="n">mc</span><span class="o">-&gt;</span><span class="n">argv</span> <span class="o">=</span> <span class="n">zmalloc</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">robj</span><span class="o">*</span><span class="p">)</span><span class="o">*</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argc</span><span class="p">);</span>          <span class="c1">// 生成参数空间</span>
+    <span class="n">memcpy</span><span class="p">(</span><span class="n">mc</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">,</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">,</span><span class="k">sizeof</span><span class="p">(</span><span class="n">robj</span><span class="o">*</span><span class="p">)</span><span class="o">*</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argc</span><span class="p">);</span>     <span class="c1">// 设置参数</span>
+    <span class="k">for</span> <span class="p">(</span><span class="n">j</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">c</span><span class="o">-&gt;</span><span class="n">argc</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span><span class="p">)</span>
+        <span class="n">incrRefCount</span><span class="p">(</span><span class="n">mc</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">[</span><span class="n">j</span><span class="p">]);</span>
+
+    <span class="c1">// 更新命令数量的计数器</span>
+    <span class="n">c</span><span class="o">-&gt;</span><span class="n">mstate</span><span class="p">.</span><span class="n">count</span><span class="o">++</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>以下是 <code class="docutils literal"><span class="pre">queueMultiCommand</span></code> 函数用到的几个结构，放在 <code class="docutils literal"><span class="pre">redis.h</span></code> 文件中，定义都非常直观：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="k">typedef</span> <span class="k">struct</span> <span class="n">redisClient</span> <span class="p">{</span>
+    <span class="c1">// 其他属性 ...</span>
+    <span class="n">redisDb</span> <span class="o">*</span><span class="n">db</span><span class="p">;</span>                <span class="c1">// 当前 DB</span>
+    <span class="kt">int</span> <span class="n">flags</span><span class="p">;</span>                  <span class="c1">// 标记事务状态，以及 WATCH 状态</span>
+    <span class="n">multiState</span> <span class="n">mstate</span><span class="p">;</span>          <span class="c1">// 事务中的所有命令</span>
+    <span class="n">list</span> <span class="o">*</span><span class="n">watched_keys</span><span class="p">;</span>         <span class="c1">// 这个客户端 WATCH 的所有 KEY</span>
+    <span class="c1">// 其他属性 ...</span>
+<span class="p">}</span> <span class="n">redisClient</span><span class="p">;</span>
+
+<span class="k">typedef</span> <span class="k">struct</span> <span class="n">multiState</span> <span class="p">{</span>
+    <span class="n">multiCmd</span> <span class="o">*</span><span class="n">commands</span><span class="p">;</span>         <span class="c1">// 保存事务中所有命令的数组</span>
+    <span class="kt">int</span> <span class="n">count</span><span class="p">;</span>                  <span class="c1">// 命令的数量</span>
+<span class="p">}</span> <span class="n">multiState</span><span class="p">;</span>
+
+<span class="k">typedef</span> <span class="k">struct</span> <span class="n">multiCmd</span> <span class="p">{</span>
+    <span class="n">robj</span> <span class="o">**</span><span class="n">argv</span><span class="p">;</span>                <span class="c1">// 命令参数</span>
+    <span class="kt">int</span> <span class="n">argc</span><span class="p">;</span>                   <span class="c1">// 命令参数数量</span>
+    <span class="k">struct</span> <span class="n">redisCommand</span> <span class="o">*</span><span class="n">cmd</span><span class="p">;</span>   <span class="c1">// 命令</span>
+<span class="p">}</span> <span class="n">multiCmd</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>回到文章开头的例子，在执行以下几个命令之后：</p>
+<div class="highlight-c"><div class="highlight"><pre>redis&gt; MULTI                         # 标记事务开始
+OK
+
+redis&gt; INCR user_id
+QUEUED
+
+redis&gt; SET greeting &quot;hello moto&quot;
+QUEUED
+
+redis&gt; GET replay
+QUEUED
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">redisClient.mstate</span></code> 的值应该类似这个样子（用 JSON 结构来表示）：</p>
+<div class="highlight-json"><div class="highlight"><pre>redisClient.mstate = {
+    &#39;count&#39;: 3,
+    &#39;commands&#39;: [
+        {
+            &#39;argv&#39;: [&#39;user_id&#39;],
+            &#39;argc&#39;: 1,
+            &#39;cmd&#39;: &#39;incrCommand&#39;,
+        },
+        {
+            &#39;argv&#39;: [&#39;greeting&#39;, &#39;hello moto&#39;],
+            &#39;argc&#39;: 2,
+            &#39;cmd&#39;: &#39;setCommand&#39;,
+        },
+        {
+            &#39;argv&#39;: [&#39;replay&#39;],
+            &#39;argc&#39;: 1,
+            &#39;cmd&#39;: &#39;getCommand&#39;,
+        }
+    ]
+}
+</pre></div>
+</div>
+</div>
+<div class="section" id="id4">
+<h2>执行事务<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h2>
+<p>既然事务里已经有了等待执行的命令，那么此时不运行事务，更待何时？！</p>
+<p>事务的执行由 <code class="docutils literal"><span class="pre">execCommand</span></code> 函数进行，它的定义如下：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="kt">void</span> <span class="nf">execCommand</span><span class="p">(</span><span class="n">redisClient</span> <span class="o">*</span><span class="n">c</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">int</span> <span class="n">j</span><span class="p">;</span>
+    <span class="n">robj</span> <span class="o">**</span><span class="n">orig_argv</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">orig_argc</span><span class="p">;</span>
+    <span class="k">struct</span> <span class="n">redisCommand</span> <span class="o">*</span><span class="n">orig_cmd</span><span class="p">;</span>
+
+    <span class="c1">// 如果没执行过 MULTI ，报错</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">flags</span> <span class="o">&amp;</span> <span class="n">REDIS_MULTI</span><span class="p">))</span> <span class="p">{</span>
+        <span class="n">addReplyError</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="s">&quot;EXEC without MULTI&quot;</span><span class="p">);</span>
+        <span class="k">return</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="cm">/* Check if we need to abort the EXEC if some WATCHed key was touched.</span>
+<span class="cm">     * A failed EXEC will return a multi bulk nil object. */</span>
+    <span class="c1">// 如果在执行事务之前，有监视中（WATCHED）的 key 被改变</span>
+    <span class="c1">// 那么取消这个事务</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">flags</span> <span class="o">&amp;</span> <span class="n">REDIS_DIRTY_CAS</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">freeClientMultiState</span><span class="p">(</span><span class="n">c</span><span class="p">);</span>
+        <span class="n">initClientMultiState</span><span class="p">(</span><span class="n">c</span><span class="p">);</span>
+        <span class="n">c</span><span class="o">-&gt;</span><span class="n">flags</span> <span class="o">&amp;=</span> <span class="o">~</span><span class="p">(</span><span class="n">REDIS_MULTI</span><span class="o">|</span><span class="n">REDIS_DIRTY_CAS</span><span class="p">);</span>
+        <span class="n">unwatchAllKeys</span><span class="p">(</span><span class="n">c</span><span class="p">);</span>
+        <span class="n">addReply</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">shared</span><span class="p">.</span><span class="n">nullmultibulk</span><span class="p">);</span>
+        <span class="k">return</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="cm">/* Replicate a MULTI request now that we are sure the block is executed.</span>
+<span class="cm">     * This way we&#39;ll deliver the MULTI/..../EXEC block as a whole and</span>
+<span class="cm">     * both the AOF and the replication link will have the same consistency</span>
+<span class="cm">     * and atomicity guarantees. */</span>
+    <span class="c1">// 为保证一致性和原子性</span>
+    <span class="c1">// 如果处在 AOF 模式中，向 AOF 文件发送 MULTI</span>
+    <span class="c1">// 如果处在复制模式中，向附属节点发送 MULTI</span>
+    <span class="n">execCommandReplicateMulti</span><span class="p">(</span><span class="n">c</span><span class="p">);</span>
+
+    <span class="cm">/* Exec all the queued commands */</span>
+    <span class="c1">// 开始执行所有事务中的命令（FIFO 方式）</span>
+    <span class="n">unwatchAllKeys</span><span class="p">(</span><span class="n">c</span><span class="p">);</span> <span class="cm">/* Unwatch ASAP otherwise we&#39;ll waste CPU cycles */</span>
+
+    <span class="c1">// 备份所有参数和命令</span>
+    <span class="n">orig_argv</span> <span class="o">=</span> <span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">;</span>
+    <span class="n">orig_argc</span> <span class="o">=</span> <span class="n">c</span><span class="o">-&gt;</span><span class="n">argc</span><span class="p">;</span>
+    <span class="n">orig_cmd</span> <span class="o">=</span> <span class="n">c</span><span class="o">-&gt;</span><span class="n">cmd</span><span class="p">;</span>
+    <span class="n">addReplyMultiBulkLen</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">mstate</span><span class="p">.</span><span class="n">count</span><span class="p">);</span>
+    <span class="k">for</span> <span class="p">(</span><span class="n">j</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">c</span><span class="o">-&gt;</span><span class="n">mstate</span><span class="p">.</span><span class="n">count</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">c</span><span class="o">-&gt;</span><span class="n">argc</span> <span class="o">=</span> <span class="n">c</span><span class="o">-&gt;</span><span class="n">mstate</span><span class="p">.</span><span class="n">commands</span><span class="p">[</span><span class="n">j</span><span class="p">].</span><span class="n">argc</span><span class="p">;</span>   <span class="c1">// 取出参数数量</span>
+        <span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span> <span class="o">=</span> <span class="n">c</span><span class="o">-&gt;</span><span class="n">mstate</span><span class="p">.</span><span class="n">commands</span><span class="p">[</span><span class="n">j</span><span class="p">].</span><span class="n">argv</span><span class="p">;</span>   <span class="c1">// 取出参数</span>
+        <span class="n">c</span><span class="o">-&gt;</span><span class="n">cmd</span> <span class="o">=</span> <span class="n">c</span><span class="o">-&gt;</span><span class="n">mstate</span><span class="p">.</span><span class="n">commands</span><span class="p">[</span><span class="n">j</span><span class="p">].</span><span class="n">cmd</span><span class="p">;</span>     <span class="c1">// 取出要执行的命令</span>
+        <span class="n">call</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">REDIS_CALL_FULL</span><span class="p">);</span>                <span class="c1">// 执行命令</span>
+
+        <span class="cm">/* Commands may alter argc/argv, restore mstate. */</span>
+        <span class="n">c</span><span class="o">-&gt;</span><span class="n">mstate</span><span class="p">.</span><span class="n">commands</span><span class="p">[</span><span class="n">j</span><span class="p">].</span><span class="n">argc</span> <span class="o">=</span> <span class="n">c</span><span class="o">-&gt;</span><span class="n">argc</span><span class="p">;</span>
+        <span class="n">c</span><span class="o">-&gt;</span><span class="n">mstate</span><span class="p">.</span><span class="n">commands</span><span class="p">[</span><span class="n">j</span><span class="p">].</span><span class="n">argv</span> <span class="o">=</span> <span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">;</span>
+        <span class="n">c</span><span class="o">-&gt;</span><span class="n">mstate</span><span class="p">.</span><span class="n">commands</span><span class="p">[</span><span class="n">j</span><span class="p">].</span><span class="n">cmd</span> <span class="o">=</span> <span class="n">c</span><span class="o">-&gt;</span><span class="n">cmd</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">// 恢复所有参数和命令</span>
+    <span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span> <span class="o">=</span> <span class="n">orig_argv</span><span class="p">;</span>
+    <span class="n">c</span><span class="o">-&gt;</span><span class="n">argc</span> <span class="o">=</span> <span class="n">orig_argc</span><span class="p">;</span>
+    <span class="n">c</span><span class="o">-&gt;</span><span class="n">cmd</span> <span class="o">=</span> <span class="n">orig_cmd</span><span class="p">;</span>
+
+    <span class="c1">// 重置事务状态</span>
+    <span class="n">freeClientMultiState</span><span class="p">(</span><span class="n">c</span><span class="p">);</span>
+    <span class="n">initClientMultiState</span><span class="p">(</span><span class="n">c</span><span class="p">);</span>
+    <span class="n">c</span><span class="o">-&gt;</span><span class="n">flags</span> <span class="o">&amp;=</span> <span class="o">~</span><span class="p">(</span><span class="n">REDIS_MULTI</span><span class="o">|</span><span class="n">REDIS_DIRTY_CAS</span><span class="p">);</span>
+
+    <span class="cm">/* Make sure the EXEC command is always replicated / AOF, since we</span>
+<span class="cm">     * always send the MULTI command (we can&#39;t know beforehand if the</span>
+<span class="cm">     * next operations will contain at least a modification to the DB). */</span>
+    <span class="c1">// 更新状态值，确保事务执行之后的状态为脏</span>
+    <span class="n">server</span><span class="p">.</span><span class="n">dirty</span><span class="o">++</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">execCommand</span></code> 函数的所有行为代码中都有注释，这里就不再赘述了。</p>
+<p>需要提醒注意的是，在关键部分的 <code class="docutils literal"><span class="pre">for</span></code> 循环代码里，我们可以看见，
+<code class="docutils literal"><span class="pre">execCommand</span></code> 的主要作用只是一个个地执行储存在 <code class="docutils literal"><span class="pre">redisClient.mstate</span></code> 数组中的命令，
+命令在执行之前并没有使用日志之类的保护机制，
+这是为什么 Redis 的事务并不支持 ACID 这些性质的（其中一个）原因。</p>
+<p>另外要注意的是，在 <code class="docutils literal"><span class="pre">execCommand</span></code> 的前半部分，调用了 <code class="docutils literal"><span class="pre">execCommandReplicateMulti</span></code> 函数，
+如果有需要的话， Redis 就会向 AOF 文件和其他复制实例（replication）发送 <code class="docutils literal"><span class="pre">MULTI</span></code> 命令，
+告诉它们：『哥要开始执行事务了，各单位请注意！』。</p>
+<p>这样的话，如果事务在执行过程中失败，那么 AOF 文件和复制实例都会察觉到，
+这时 Redis 实例会报错并退出，然后等待管理员使用 <code class="docutils literal"><span class="pre">redis-check-aof</span></code> 命令来进行数据修复，
+具体请参考： [Redis 官方网站上的 Transaction 介绍](<a class="reference external" href="http://redis.io/topics/transactions">http://redis.io/topics/transactions</a>) 。</p>
+</div>
+<div class="section" id="id5">
+<h2>取消事务<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h2>
+<p>在一些情况下，我们也想在中途取消事务的执行。</p>
+<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/discard.html">DISCARD</a> 命令就是用来中途取消事务的，
+它的实现由 <code class="docutils literal"><span class="pre">discardTransaction</span></code> 和 <code class="docutils literal"><span class="pre">discardCommand</span></code> 两个函数实现：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// 放弃执行事务</span>
+<span class="kt">void</span> <span class="nf">discardTransaction</span><span class="p">(</span><span class="n">redisClient</span> <span class="o">*</span><span class="n">c</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">freeClientMultiState</span><span class="p">(</span><span class="n">c</span><span class="p">);</span>                        <span class="c1">// 释放事务资源</span>
+    <span class="n">initClientMultiState</span><span class="p">(</span><span class="n">c</span><span class="p">);</span>                        <span class="c1">// 重置事务状态</span>
+    <span class="n">c</span><span class="o">-&gt;</span><span class="n">flags</span> <span class="o">&amp;=</span> <span class="o">~</span><span class="p">(</span><span class="n">REDIS_MULTI</span><span class="o">|</span><span class="n">REDIS_DIRTY_CAS</span><span class="p">);;</span>    <span class="c1">// 关闭 FLAG</span>
+    <span class="n">unwatchAllKeys</span><span class="p">(</span><span class="n">c</span><span class="p">);</span>          <span class="c1">// 取消对所有 key 的 WATCH</span>
+<span class="p">}</span>
+
+<span class="c1">// 放弃执行事务（命令）</span>
+<span class="kt">void</span> <span class="nf">discardCommand</span><span class="p">(</span><span class="n">redisClient</span> <span class="o">*</span><span class="n">c</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// 如果没有调用过 MULTI ，报错</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">flags</span> <span class="o">&amp;</span> <span class="n">REDIS_MULTI</span><span class="p">))</span> <span class="p">{</span>
+        <span class="n">addReplyError</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="s">&quot;DISCARD without MULTI&quot;</span><span class="p">);</span>
+        <span class="k">return</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">discardTransaction</span><span class="p">(</span><span class="n">c</span><span class="p">);</span>
+    <span class="n">addReply</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">shared</span><span class="p">.</span><span class="n">ok</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>其中 <code class="docutils literal"><span class="pre">freeClientMultiState</span></code> 和 <code class="docutils literal"><span class="pre">initClientMultiState</span></code> 两个函数用于重置 <code class="docutils literal"><span class="pre">redisClient.mstate</span></code> 数组，从而达到删除所有入队命令的作用：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cm">/* Client state initialization for MULTI/EXEC */</span>
+<span class="c1">// 初始化客户端状态，为执行事务作准备</span>
+<span class="kt">void</span> <span class="nf">initClientMultiState</span><span class="p">(</span><span class="n">redisClient</span> <span class="o">*</span><span class="n">c</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">c</span><span class="o">-&gt;</span><span class="n">mstate</span><span class="p">.</span><span class="n">commands</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>  <span class="c1">// 清空命令数组</span>
+    <span class="n">c</span><span class="o">-&gt;</span><span class="n">mstate</span><span class="p">.</span><span class="n">count</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>        <span class="c1">// 清空命令计数器</span>
+<span class="p">}</span>
+
+<span class="cm">/* Release all the resources associated with MULTI/EXEC state */</span>
+<span class="c1">// 释放所有事务资源</span>
+<span class="kt">void</span> <span class="nf">freeClientMultiState</span><span class="p">(</span><span class="n">redisClient</span> <span class="o">*</span><span class="n">c</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">int</span> <span class="n">j</span><span class="p">;</span>
+
+    <span class="c1">// 释放所有命令</span>
+    <span class="k">for</span> <span class="p">(</span><span class="n">j</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">c</span><span class="o">-&gt;</span><span class="n">mstate</span><span class="p">.</span><span class="n">count</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+        <span class="kt">int</span> <span class="n">i</span><span class="p">;</span>
+        <span class="n">multiCmd</span> <span class="o">*</span><span class="n">mc</span> <span class="o">=</span> <span class="n">c</span><span class="o">-&gt;</span><span class="n">mstate</span><span class="p">.</span><span class="n">commands</span><span class="o">+</span><span class="n">j</span><span class="p">;</span>    <span class="c1">// 将指针指向目标命令</span>
+
+        <span class="c1">// 释放所有命令的参数，以及保存参数的数组</span>
+        <span class="k">for</span> <span class="p">(</span><span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">mc</span><span class="o">-&gt;</span><span class="n">argc</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span>
+            <span class="n">decrRefCount</span><span class="p">(</span><span class="n">mc</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">[</span><span class="n">i</span><span class="p">]);</span>
+        <span class="n">zfree</span><span class="p">(</span><span class="n">mc</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="c1">// 释放保存命令的数组</span>
+    <span class="n">zfree</span><span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">mstate</span><span class="p">.</span><span class="n">commands</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id6">
+<h2>小结<a class="headerlink" href="#id6" title="Permalink to this headline">¶</a></h2>
+<p>对 Redis 事务的实现分析就到此结束了，希望这篇文章对你理解 Redis 的事务有所帮助。</p>
+<p>跟之前一样，我将带有完整注释的代码放到了 GITHUB 上，有兴趣了解全部细节的朋友可以参考源码： <a class="reference external" href="https://github.com/huangz1990/reading_redis_source">https://github.com/huangz1990/reading_redis_source</a> 。</p>
+<p>最后，和 Redis 的事务有关的命令还有 <code class="docutils literal"><span class="pre">WATCH</span></code> 和 <code class="docutils literal"><span class="pre">UNWATCH</span></code> ，在下篇文章中，会继续探讨它们的实现方式。</p>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">事务</a><ul>
+<li><a class="reference internal" href="#redis">Redis 的事务</a></li>
+<li><a class="reference internal" href="#id2">MULTI 命令</a></li>
+<li><a class="reference internal" href="#id3">命令的入队</a></li>
+<li><a class="reference internal" href="#id4">执行事务</a></li>
+<li><a class="reference internal" href="#id5">取消事务</a></li>
+<li><a class="reference internal" href="#id6">小结</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="pubsub.html"
+                        title="previous chapter">发布/订阅</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="watch-and-unwatch.html"
+                        title="next chapter">WATCH 和 UNWATCH</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

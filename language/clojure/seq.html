@@ -1,0 +1,225 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>序列 &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="up" title="Clojure" href="index.html" />
+    <link rel="next" title="定义变量" href="variable.html" />
+    <link rel="prev" title="复合类型" href="composite_type.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="variable.html" title="定义变量"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="composite_type.html" title="复合类型"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Clojure</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>序列<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<p>序列是一个逻辑列表， Clojure 通过底层的 <code class="docutils literal"><span class="pre">ISeq</span></code> 接口来对序列进行支持，允许其他容器创建遍历自身元素的序列。每种 Clojure 容器都至少提供一种或以上的序列对象。</p>
+<p>可以将序列看作是没有带状态指针、持久化和不可改版本的迭代器或枚举器。</p>
+<div class="section" id="id2">
+<h2>序列接口<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>要使得容器支持序列操作，最起码要实现以下三个 API ，它们分别是 <code class="docutils literal"><span class="pre">cons</span></code> 、 <code class="docutils literal"><span class="pre">first</span></code> 和 <code class="docutils literal"><span class="pre">rest</span></code> 。</p>
+<p><code class="docutils literal"><span class="pre">(cons</span> <span class="pre">item</span> <span class="pre">seq)</span></code> 创建一个包含新元素的序列：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">cons </span><span class="mi">1</span> <span class="o">&#39;</span><span class="p">())</span>
+<span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">cons </span><span class="mi">1</span> <span class="o">&#39;</span><span class="p">(</span><span class="mi">2</span> <span class="mi">3</span><span class="p">))</span>
+<span class="p">(</span><span class="mi">1</span> <span class="mi">2</span> <span class="mi">3</span><span class="p">)</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">cons </span><span class="mi">1</span> <span class="o">&#39;</span><span class="p">())</span>
+<span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">cons </span><span class="mi">1</span> <span class="p">(</span><span class="nb">cons </span><span class="mi">2</span> <span class="p">(</span><span class="nb">cons </span><span class="mi">3</span> <span class="o">&#39;</span><span class="p">())))</span>
+<span class="p">(</span><span class="mi">1</span> <span class="mi">2</span> <span class="mi">3</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">(first</span> <span class="pre">coll)</span></code> 返回序列中的第一个元素，如果传入序列为空，那么返回 <code class="docutils literal"><span class="pre">nil</span></code> ：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">first </span><span class="o">&#39;</span><span class="p">())</span>
+<span class="nv">nil</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">first </span><span class="o">&#39;</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
+<span class="mi">1</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">first </span><span class="o">&#39;</span><span class="p">(</span><span class="mi">1</span> <span class="mi">2</span><span class="p">))</span>
+<span class="mi">1</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">(rest</span> <span class="pre">coll)</span></code> 返回序列中除第一个元素之外的其他元素，如果传入序列为空，那么返回空序列 <code class="docutils literal"><span class="pre">'()</span></code> ：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">rest </span><span class="o">&#39;</span><span class="p">())</span>
+<span class="p">()</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">rest </span><span class="o">&#39;</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
+<span class="p">()</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">rest </span><span class="o">&#39;</span><span class="p">(</span><span class="mi">1</span> <span class="mi">2</span><span class="p">))</span>
+<span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">rest </span><span class="o">&#39;</span><span class="p">(</span><span class="mi">1</span> <span class="mi">2</span> <span class="mi">3</span><span class="p">))</span>
+<span class="p">(</span><span class="mi">2</span> <span class="mi">3</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id3">
+<h2>创建序列对象<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<p>使用 <code class="docutils literal"><span class="pre">seq</span></code> 函数是创建序列对象最常用的方式，传入的参数可以是任何 Clojure 容器类型，或者是实现了 <code class="docutils literal"><span class="pre">Iterable</span></code> 接口的 JAVA 对象：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">seq </span><span class="s">&quot;hello moto&quot;</span><span class="p">)</span>
+<span class="p">(</span><span class="sc">\h</span> <span class="sc">\e</span> <span class="sc">\l</span> <span class="sc">\l</span> <span class="sc">\o</span> <span class="sc">\s</span><span class="nv">pace</span> <span class="sc">\m</span> <span class="sc">\o</span> <span class="sc">\t</span> <span class="sc">\o</span><span class="p">)</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">seq </span><span class="p">(</span><span class="nb">list </span><span class="mi">1</span> <span class="mi">2</span> <span class="mi">3</span><span class="p">))</span>
+<span class="p">(</span><span class="mi">1</span> <span class="mi">2</span> <span class="mi">3</span><span class="p">)</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">seq </span><span class="p">[</span><span class="mi">1</span> <span class="mi">2</span> <span class="mi">3</span><span class="p">])</span>
+<span class="p">(</span><span class="mi">1</span> <span class="mi">2</span> <span class="mi">3</span><span class="p">)</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">seq </span><span class="p">{</span><span class="ss">:clojure</span> <span class="s">&quot;.clj&quot;</span> <span class="ss">:haskell</span> <span class="s">&quot;.hs&quot;</span> <span class="ss">:scheme</span> <span class="s">&quot;.scm&quot;</span><span class="p">})</span>
+<span class="p">([</span><span class="ss">:scheme</span> <span class="s">&quot;.scm&quot;</span><span class="p">]</span> <span class="p">[</span><span class="ss">:clojure</span> <span class="s">&quot;.clj&quot;</span><span class="p">]</span> <span class="p">[</span><span class="ss">:haskell</span> <span class="s">&quot;.hs&quot;</span><span class="p">])</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">seq </span><span class="o">#</span><span class="p">{</span><span class="mi">1</span> <span class="mi">2</span> <span class="mi">3</span><span class="p">})</span>
+<span class="p">(</span><span class="mi">1</span> <span class="mi">2</span> <span class="mi">3</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>还有一些其他创建列表对象的方法，比如 <code class="docutils literal"><span class="pre">keys</span></code> 和 <code class="docutils literal"><span class="pre">vals</span></code> ，以及 <code class="docutils literal"><span class="pre">rseq</span></code> ，诸如此类。</p>
+</div>
+<div class="section" id="id4">
+<h2>处理序列<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h2>
+<p>Clojure 提供了一集非常丰富的函数来对序列进行操作，比如常见的 <code class="docutils literal"><span class="pre">map</span></code> 、 <code class="docutils literal"><span class="pre">filter</span></code> 、 <code class="docutils literal"><span class="pre">reduce</span></code> 等等，在<a class="reference external" href="http://clojure.org/sequences">Sequence 的文档页面</a>详细地列出了这些 API 。</p>
+</div>
+<div class="section" id="id5">
+<h2>惰性序列<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h2>
+<p>Clojure 实现了惰性序列，用于处理非常昂贵的计算，或者是无限序列。</p>
+<p>创建一个惰性序列非常简单，只要用 <code class="docutils literal"><span class="pre">lazy-seq</span></code> 宏包裹一个创建 seq 对象的序列即可。</p>
+<p>以下是一个惰性的 <code class="docutils literal"><span class="pre">map</span></code> 函数定义，它是内置 <code class="docutils literal"><span class="pre">map</span></code> 函数的简化版本：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="p">(</span><span class="kd">defn </span><span class="nv">lazy-map</span> <span class="p">[</span><span class="nv">f</span> <span class="nv">coll</span><span class="p">]</span>
+    <span class="p">(</span><span class="nf">lazy-seq</span>
+        <span class="p">(</span><span class="nb">when-let </span><span class="p">[</span><span class="nv">s</span> <span class="p">(</span><span class="nb">seq </span><span class="nv">coll</span><span class="p">)]</span>
+            <span class="p">(</span><span class="nb">cons </span><span class="p">(</span><span class="nf">f</span> <span class="p">(</span><span class="nb">first </span><span class="nv">s</span><span class="p">))</span>
+                  <span class="p">(</span><span class="nb">map </span><span class="nv">f</span> <span class="p">(</span><span class="nb">rest </span><span class="nv">s</span><span class="p">))))))</span>
+</pre></div>
+</div>
+<p>测试 <code class="docutils literal"><span class="pre">lazy-map</span></code> ：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">take </span><span class="mi">10</span> <span class="p">(</span><span class="nf">lazy-map</span> <span class="o">#</span><span class="p">(</span><span class="nb">* </span><span class="nv">%</span> <span class="mi">2</span><span class="p">)</span> <span class="p">(</span><span class="nf">range</span><span class="p">)))</span>
+<span class="p">(</span><span class="mi">0</span> <span class="mi">2</span> <span class="mi">4</span> <span class="mi">6</span> <span class="mi">8</span> <span class="mi">10</span> <span class="mi">12</span> <span class="mi">14</span> <span class="mi">16</span> <span class="mi">18</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>所有作用于序列对象上的操作，都可以用于处理惰性序列。</p>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">序列</a><ul>
+<li><a class="reference internal" href="#id2">序列接口</a></li>
+<li><a class="reference internal" href="#id3">创建序列对象</a></li>
+<li><a class="reference internal" href="#id4">处理序列</a></li>
+<li><a class="reference internal" href="#id5">惰性序列</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="composite_type.html"
+                        title="previous chapter">复合类型</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="variable.html"
+                        title="next chapter">定义变量</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

@@ -1,0 +1,517 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>字典 &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="up" title="Redis 源码分析" href="index.html" />
+    <link rel="next" title="SDS 结构" href="sds.html" />
+    <link rel="prev" title="双链表" href="adlist.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="sds.html" title="SDS 结构"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="adlist.html" title="双链表"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Redis 源码分析</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>字典<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<p>字典是 Redis 的核心数据结构之一，在 Redis 中，每个数据库本身也是一个字典，而且字典也是 Redis 的 Hash 类型的底层实现。</p>
+<p>本文通过分析 Redis 源码里的 <code class="docutils literal"><span class="pre">dict.h</span></code> 和 <code class="docutils literal"><span class="pre">dict.c</span></code> 文件，了解字典结构的详细实现，籍此加深对 Redis 的理解。</p>
+<p>由于字典是一种非常常见的数据结构，而 <code class="docutils literal"><span class="pre">dict.c</span></code> 中使用的 <a class="reference external" href="http://en.wikipedia.org/wiki/Hash_table#Separate_chaining">separate chaining 哈希表实现</a> 可以在任何一本算法书上找到，因此，在本文中没有对字典的查找和增删等操作做过多的着墨，而是将重点放到整个字典结构的运作流程，以及哈希表的渐增式 rehash 操作上。</p>
+<div class="section" id="id2">
+<h2>字典实现的数据结构<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p><code class="docutils literal"><span class="pre">dict.h</span></code> 文件里定义了字典实现的数据结构，比如 <code class="docutils literal"><span class="pre">dict</span></code> 、 <code class="docutils literal"><span class="pre">dictht</span></code> 和 <code class="docutils literal"><span class="pre">dictEntry</span></code> 等，它们之间的关系可以用下图来描述：</p>
+<img alt="../../_images/relationship.png" src="../../_images/relationship.png" />
+<p>其中， <code class="docutils literal"><span class="pre">dict</span></code> 结构的定义如下：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="k">typedef</span> <span class="k">struct</span> <span class="n">dict</span> <span class="p">{</span>
+    <span class="n">dictType</span> <span class="o">*</span><span class="n">type</span><span class="p">;</span>     <span class="c1">// 为哈希表中不同类型的值所使用的一族操作函数</span>
+    <span class="kt">void</span> <span class="o">*</span><span class="n">privdata</span><span class="p">;</span>
+    <span class="n">dictht</span> <span class="n">ht</span><span class="p">[</span><span class="mi">2</span><span class="p">];</span>       <span class="c1">// 每个字典使用两个哈希表（用于渐增式 rehash）</span>
+    <span class="kt">int</span> <span class="n">rehashidx</span><span class="p">;</span>      <span class="c1">// 指示 rehash 是否正在进行，如果不是则为 -1</span>
+    <span class="kt">int</span> <span class="n">iterators</span><span class="p">;</span>      <span class="c1">// 当前正在使用的 iterator 的数量</span>
+<span class="p">}</span> <span class="n">dict</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>代码中的注释基本说明相关属性的作用了，需要补充的一些是：</p>
+<p>为了实现渐增式 rehash ，每个字典使用两个哈希表，分别为 <code class="docutils literal"><span class="pre">ht[0]</span></code> 和 <code class="docutils literal"><span class="pre">ht[1]</span></code> 。当 rehash 开始进行的时候， Redis 会逐个逐个地将 <code class="docutils literal"><span class="pre">ht[0]</span></code> 哈希表中的元素移动到 <code class="docutils literal"><span class="pre">ht[1]</span></code> 哈希表，直到 <code class="docutils literal"><span class="pre">ht[0]</span></code> 哈希表被清空为止。文章后面会给出 rehash 的相关细节。</p>
+<p>另一方面， <code class="docutils literal"><span class="pre">rehashidx</span></code> 则是 rehash 操作的计数器，这方面的相关细节也会后面给出。</p>
+<p>接下来是哈希表结构 <code class="docutils literal"><span class="pre">dictht</span></code> ，这个哈希表是一个典型的 separate chaining hash table 实现，它通过将哈希值相同的元素放到同一个链表中来解决冲突问题：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="k">typedef</span> <span class="k">struct</span> <span class="n">dictht</span> <span class="p">{</span>
+    <span class="n">dictEntry</span> <span class="o">**</span><span class="n">table</span><span class="p">;</span>      <span class="c1">// 节点指针数组</span>
+    <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">size</span><span class="p">;</span>     <span class="c1">// 桶的大小（最多可容纳多少节点）</span>
+    <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">sizemask</span><span class="p">;</span> <span class="c1">// mask 码，用于地址索引计算</span>
+    <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">used</span><span class="p">;</span>     <span class="c1">// 已有节点数量</span>
+<span class="p">}</span> <span class="n">dictht</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>最后要介绍的是链表的节点结构 <code class="docutils literal"><span class="pre">dictEntry</span></code> ：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="k">typedef</span> <span class="k">struct</span> <span class="n">dictEntry</span> <span class="p">{</span>
+    <span class="kt">void</span> <span class="o">*</span><span class="n">key</span><span class="p">;</span>              <span class="c1">// 键</span>
+    <span class="k">union</span> <span class="p">{</span>
+        <span class="kt">void</span> <span class="o">*</span><span class="n">val</span><span class="p">;</span>
+        <span class="kt">uint64_t</span> <span class="n">u64</span><span class="p">;</span>
+        <span class="kt">int64_t</span> <span class="n">s64</span><span class="p">;</span>
+    <span class="p">}</span> <span class="n">v</span><span class="p">;</span>                    <span class="c1">// 值(可以有几种不同类型)</span>
+    <span class="k">struct</span> <span class="n">dictEntry</span> <span class="o">*</span><span class="n">next</span><span class="p">;</span> <span class="c1">// 指向下一个哈希节点(形成链表)</span>
+<span class="p">}</span> <span class="n">dictEntry</span><span class="p">;</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">dictEntry</span></code> 中的 <code class="docutils literal"><span class="pre">key</span></code> 属性保存字典的键，而 <code class="docutils literal"><span class="pre">v</span></code> 属性则保存字典的值， <code class="docutils literal"><span class="pre">next</span></code> 保存一个指向 <code class="docutils literal"><span class="pre">dictEntry</span></code> 自身的指针，用于构成链表，解决哈希值的冲突问题。</p>
+</div>
+<div class="section" id="id3">
+<h2>创建字典<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<p>在初步了解了字典实现所使用的结构之后，现在是时候来看看相关的函数是怎样来操作这些结构的了。让我们从创建字典开始，一步步研究字典以及哈希表的运作流程。</p>
+<p>使用字典的第一步就是创建字典，创建新字典执行这样一个调用链：</p>
+<img alt="../../_images/create-dict.png" src="../../_images/create-dict.png" />
+<p><code class="docutils literal"><span class="pre">dictCreate</span></code> 函数创建一个新的 <code class="docutils literal"><span class="pre">dict</span></code> 结构，然后将它传给 <code class="docutils literal"><span class="pre">_dictInit</span></code> 函数：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">dict</span> <span class="o">*</span><span class="nf">dictCreate</span><span class="p">(</span><span class="n">dictType</span> <span class="o">*</span><span class="n">type</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">privDataPtr</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">dict</span> <span class="o">*</span><span class="n">d</span> <span class="o">=</span> <span class="n">zmalloc</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="o">*</span><span class="n">d</span><span class="p">));</span>
+
+    <span class="n">_dictInit</span><span class="p">(</span><span class="n">d</span><span class="p">,</span><span class="n">type</span><span class="p">,</span><span class="n">privDataPtr</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">d</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">_dictInit</span></code> 函数为 <code class="docutils literal"><span class="pre">dict</span></code> 结构的各个属性设置默认值，并调用 <code class="docutils literal"><span class="pre">_dictReset</span></code> 函数为两个哈希表进行初始化设置：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="kt">int</span> <span class="nf">_dictInit</span><span class="p">(</span><span class="n">dict</span> <span class="o">*</span><span class="n">d</span><span class="p">,</span> <span class="n">dictType</span> <span class="o">*</span><span class="n">type</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">privDataPtr</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">_dictReset</span><span class="p">(</span><span class="o">&amp;</span><span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>      <span class="c1">// 初始化字典内的两个哈希表</span>
+    <span class="n">_dictReset</span><span class="p">(</span><span class="o">&amp;</span><span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">1</span><span class="p">]);</span>
+
+    <span class="n">d</span><span class="o">-&gt;</span><span class="n">type</span> <span class="o">=</span> <span class="n">type</span><span class="p">;</span>             <span class="c1">// 设置函数指针</span>
+    <span class="n">d</span><span class="o">-&gt;</span><span class="n">privdata</span> <span class="o">=</span> <span class="n">privDataPtr</span><span class="p">;</span>
+    <span class="n">d</span><span class="o">-&gt;</span><span class="n">rehashidx</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>          <span class="c1">// -1 表示没有在进行 rehash</span>
+    <span class="n">d</span><span class="o">-&gt;</span><span class="n">iterators</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>           <span class="c1">// 0 表示没有迭代器在进行迭代</span>
+
+    <span class="k">return</span> <span class="n">DICT_OK</span><span class="p">;</span>             <span class="c1">// 返回成功信号</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">_dictReset</span></code> 函数为字典的几个属性值赋值，但并不为这两个哈希表的链表数组分配空间：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="k">static</span> <span class="kt">void</span> <span class="nf">_dictReset</span><span class="p">(</span><span class="n">dictht</span> <span class="o">*</span><span class="n">ht</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">ht</span><span class="o">-&gt;</span><span class="n">table</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>   <span class="c1">// 未分配空间</span>
+    <span class="n">ht</span><span class="o">-&gt;</span><span class="n">size</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">ht</span><span class="o">-&gt;</span><span class="n">sizemask</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">ht</span><span class="o">-&gt;</span><span class="n">used</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id4">
+<h2>哈希表链表的创建流程<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h2>
+<p>每个 <code class="docutils literal"><span class="pre">dict</span></code> 结构都使用两个哈希表，分别是 <code class="docutils literal"><span class="pre">dict-&gt;h1[0]</span></code> 和 <code class="docutils literal"><span class="pre">dict-&gt;ht[1]</span></code> ，为了称呼方便，从现在开始，我们将它们分别叫做 0 号哈希表和 1 号哈希表。</p>
+<p>从上一节的介绍可以知道，创建一个新的字典并不为哈希表的链表数组分配内存，也即是 <code class="docutils literal"><span class="pre">dict-&gt;ht[0]-&gt;table</span></code> 和 <code class="docutils literal"><span class="pre">dict-&gt;ht[1]-&gt;table</span></code> 都被设为 <code class="docutils literal"><span class="pre">NULL</span></code> 。</p>
+<p>只有当首次调用 <code class="docutils literal"><span class="pre">dictAdd</span></code> 向字典中加入元素的时候， 0 号哈希表的链表数组才会被创建， <code class="docutils literal"><span class="pre">dictAdd</span></code> 执行这样一个调用序列：</p>
+<img alt="../../_images/add-element.png" src="../../_images/add-element.png" />
+<p><code class="docutils literal"><span class="pre">dictAddRaw</span></code> 是向字典加入元素这一动作的底层实现，为了计算新加入元素的 <code class="docutils literal"><span class="pre">index</span></code> 值，它会调用 <code class="docutils literal"><span class="pre">_dictKeyIndex</span></code> ：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">dictEntry</span> <span class="o">*</span><span class="nf">dictAddRaw</span><span class="p">(</span><span class="n">dict</span> <span class="o">*</span><span class="n">d</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">key</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// 被省略的代码...</span>
+
+    <span class="c1">// 计算 key 的 index 值</span>
+    <span class="c1">// 如果 key 已经存在，_dictKeyIndex 返回 -1</span>
+    <span class="k">if</span> <span class="p">((</span><span class="n">index</span> <span class="o">=</span> <span class="n">_dictKeyIndex</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="n">key</span><span class="p">))</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+
+    <span class="c1">// 被省略的代码...</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">_dictKeyIndex</span></code> 会在计算 <code class="docutils literal"><span class="pre">index</span></code> 值之前，先调用 <code class="docutils literal"><span class="pre">_dictExpandIfNeeded</span></code> ，检查两个哈希表是否有足够的空间容纳新元素：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="k">static</span> <span class="kt">int</span> <span class="nf">_dictKeyIndex</span><span class="p">(</span><span class="n">dict</span> <span class="o">*</span><span class="n">d</span><span class="p">,</span> <span class="k">const</span> <span class="kt">void</span> <span class="o">*</span><span class="n">key</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// 被省略的代码...</span>
+
+    <span class="cm">/* Expand the hashtable if needed */</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">_dictExpandIfNeeded</span><span class="p">(</span><span class="n">d</span><span class="p">)</span> <span class="o">==</span> <span class="n">DICT_ERR</span><span class="p">)</span>
+        <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+
+    <span class="c1">// 被省略的代码...</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>进行到 <code class="docutils literal"><span class="pre">_dictExpandIfNeeded</span></code> 这一步，一些有趣的事情就开始发生了， <code class="docutils literal"><span class="pre">_dictExpandIfNeeded</span></code> 会检测到 0 号哈希表还没有分配任何空间，于是它调用 <code class="docutils literal"><span class="pre">dictExpand</span></code> ，传入 <code class="docutils literal"><span class="pre">DICT_HT_INITIAL_SIZE</span></code> 常量，作为哈希表链表数组的初始大小（在当前版本中， <code class="docutils literal"><span class="pre">DICT_HT_INITIAL_SIZE</span></code> 的默认值为 <code class="docutils literal"><span class="pre">4</span></code> ）：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="k">static</span> <span class="kt">int</span> <span class="nf">_dictExpandIfNeeded</span><span class="p">(</span><span class="n">dict</span> <span class="o">*</span><span class="n">d</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// 被省略的代码...</span>
+
+    <span class="cm">/* If the hash table is empty expand it to the intial size. */</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="k">return</span> <span class="n">dictExpand</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="n">DICT_HT_INITIAL_SIZE</span><span class="p">);</span>
+
+    <span class="c1">// 被省略的代码...</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">dictExpand</span></code> 会创建一个分配了链表数组的新哈希表，然后进行判断，决定是应该将新哈希表赋值给 0 号哈希表，还是 1 号哈希表：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="kt">int</span> <span class="nf">dictExpand</span><span class="p">(</span><span class="n">dict</span> <span class="o">*</span><span class="n">d</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">size</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// 创建带链表数组的新哈希表</span>
+    <span class="n">dictht</span> <span class="n">n</span><span class="p">;</span> <span class="cm">/* the new hash table */</span>
+    <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">realsize</span> <span class="o">=</span> <span class="n">_dictNextPower</span><span class="p">(</span><span class="n">size</span><span class="p">);</span>
+
+    <span class="cm">/* the size is invalid if it is smaller than the number of</span>
+<span class="cm">     * elements already inside the hash table */</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">dictIsRehashing</span><span class="p">(</span><span class="n">d</span><span class="p">)</span> <span class="o">||</span> <span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">used</span> <span class="o">&gt;</span> <span class="n">size</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">DICT_ERR</span><span class="p">;</span>
+
+    <span class="cm">/* Allocate the new hash table and initialize all pointers to NULL */</span>
+    <span class="n">n</span><span class="p">.</span><span class="n">size</span> <span class="o">=</span> <span class="n">realsize</span><span class="p">;</span>
+    <span class="n">n</span><span class="p">.</span><span class="n">sizemask</span> <span class="o">=</span> <span class="n">realsize</span><span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+    <span class="n">n</span><span class="p">.</span><span class="n">table</span> <span class="o">=</span> <span class="n">zcalloc</span><span class="p">(</span><span class="n">realsize</span><span class="o">*</span><span class="k">sizeof</span><span class="p">(</span><span class="n">dictEntry</span><span class="o">*</span><span class="p">));</span>
+    <span class="n">n</span><span class="p">.</span><span class="n">used</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+    <span class="cm">/* Is this the first initialization? If so it&#39;s not really a rehashing</span>
+<span class="cm">     * we just set the first hash table so that it can accept keys. */</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">table</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">n</span><span class="p">;</span>       <span class="c1">// 将新哈希表赋值给 0 号哈希表</span>
+        <span class="k">return</span> <span class="n">DICT_OK</span><span class="p">;</span>     <span class="c1">// 然后返回</span>
+    <span class="p">}</span>
+
+    <span class="c1">// 被省略的代码 ...</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>到了这一步， 0 号哈希表已经从无到有被创建出来了。</p>
+</div>
+<div class="section" id="id5">
+<h2>字典的扩展，以及 1 号哈希表的创建<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h2>
+<p>在 0 号哈希表创建之后，字典就可以支持增加、删除和查找等操作了。</p>
+<p>唯一的问题是，这个最初创建的 0 号哈希表非常小，它很快就会被添加进来的元素填满，这时候，字典的扩展（expand）机制就会被激活，它执行一系列动作，为字典分配更多空间，从而使得字典可以继续正常运作。</p>
+<p>因为字典的的底层实现是哈希表，所以对字典的扩展，实际上就是对（字典的）哈希表做扩展。这个过程可以分为两步进行：</p>
+<ol class="arabic simple">
+<li>创建一个比现有的 0 号哈希表更大的 1 号哈希表</li>
+<li>将 0 号哈希表的所有元素移动到 1 号哈希表去</li>
+</ol>
+<p><code class="docutils literal"><span class="pre">_dictExpandIfNeeded</span></code> 函数检查字典是否需要扩展，每次往字典里添加新元素之前，这个函数都会被执行：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="k">static</span> <span class="kt">int</span> <span class="nf">_dictExpandIfNeeded</span><span class="p">(</span><span class="n">dict</span> <span class="o">*</span><span class="n">d</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// 被省略的代码...</span>
+
+    <span class="c1">// 当 0 号哈希表的已用节点数大于等于它的桶数量，</span>
+    <span class="c1">// 且以下两个条件的其中之一被满足时，执行 expand 操作：</span>
+    <span class="c1">// 1) dict_can_resize 变量为真，正常 expand</span>
+    <span class="c1">// 2) 已用节点数除以桶数量的比率超过变量 dict_force_resize_ratio ，强制 expand</span>
+    <span class="c1">// (目前版本中 dict_force_resize_ratio = 5)</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">used</span> <span class="o">&gt;=</span> <span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">size</span> <span class="o">&amp;&amp;</span>
+        <span class="p">(</span><span class="n">dict_can_resize</span> <span class="o">||</span>
+         <span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">used</span><span class="o">/</span><span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">size</span> <span class="o">&gt;</span> <span class="n">dict_force_resize_ratio</span><span class="p">))</span>
+        <span class="p">{</span>
+            <span class="k">return</span> <span class="n">dictExpand</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="p">((</span><span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">size</span> <span class="o">&gt;</span> <span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">used</span><span class="p">)</span> <span class="o">?</span>
+                                        <span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="nl">size</span> <span class="p">:</span> <span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">used</span><span class="p">)</span><span class="o">*</span><span class="mi">2</span><span class="p">);</span>
+        <span class="p">}</span>
+
+    <span class="c1">// 被省略的代码...</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>可以看到，当代码注释中所说的两种情况的其中一种被满足的时候， <code class="docutils literal"><span class="pre">dictExpand</span></code> 函数就会被调用： 0 号哈希表的桶数量和节点数量两个数值之间的较大者乘以 2 ，就会被作为第二个参数传入 <code class="docutils literal"><span class="pre">dictExpand</span></code> 函数。</p>
+<p>这次调用 <code class="docutils literal"><span class="pre">dictExpand</span></code> 函数执行的是和之前创建 0 号哈希表时不同的路径 —— 这一次，程序执行的是 else case —— 它将新哈希表赋值给 1 号哈希表，并将字典的 <code class="docutils literal"><span class="pre">rehashidx</span></code> 属性从 <code class="docutils literal"><span class="pre">-1</span></code> 改为 <code class="docutils literal"><span class="pre">0</span></code>：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="kt">int</span> <span class="nf">dictExpand</span><span class="p">(</span><span class="n">dict</span> <span class="o">*</span><span class="n">d</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">size</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// 创建带链表数组的新哈希表</span>
+    <span class="n">dictht</span> <span class="n">n</span><span class="p">;</span> <span class="cm">/* the new hash table */</span>
+    <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">realsize</span> <span class="o">=</span> <span class="n">_dictNextPower</span><span class="p">(</span><span class="n">size</span><span class="p">);</span>
+
+    <span class="cm">/* the size is invalid if it is smaller than the number of</span>
+<span class="cm">     * elements already inside the hash table */</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">dictIsRehashing</span><span class="p">(</span><span class="n">d</span><span class="p">)</span> <span class="o">||</span> <span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">used</span> <span class="o">&gt;</span> <span class="n">size</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">DICT_ERR</span><span class="p">;</span>
+
+    <span class="cm">/* Allocate the new hash table and initialize all pointers to NULL */</span>
+    <span class="n">n</span><span class="p">.</span><span class="n">size</span> <span class="o">=</span> <span class="n">realsize</span><span class="p">;</span>
+    <span class="n">n</span><span class="p">.</span><span class="n">sizemask</span> <span class="o">=</span> <span class="n">realsize</span><span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+    <span class="n">n</span><span class="p">.</span><span class="n">table</span> <span class="o">=</span> <span class="n">zcalloc</span><span class="p">(</span><span class="n">realsize</span><span class="o">*</span><span class="k">sizeof</span><span class="p">(</span><span class="n">dictEntry</span><span class="o">*</span><span class="p">));</span>
+    <span class="n">n</span><span class="p">.</span><span class="n">used</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+    <span class="cm">/* Is this the first initialization? If so it&#39;s not really a rehashing</span>
+<span class="cm">     * we just set the first hash table so that it can accept keys. */</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">table</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">n</span><span class="p">;</span>
+        <span class="k">return</span> <span class="n">DICT_OK</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="cm">/* Prepare a second hash table for incremental rehashing */</span>
+    <span class="c1">// 这次执行这个动作</span>
+    <span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">n</span><span class="p">;</span>       <span class="c1">// 赋值新哈希表到 d-&gt;ht[1]</span>
+    <span class="n">d</span><span class="o">-&gt;</span><span class="n">rehashidx</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>   <span class="c1">// 将 rehashidx 设置为 0</span>
+    <span class="k">return</span> <span class="n">DICT_OK</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="rehash">
+<h2>渐进式 rehash ，以及平摊操作<a class="headerlink" href="#rehash" title="Permalink to this headline">¶</a></h2>
+<p>在前一节的最后， <code class="docutils literal"><span class="pre">dictExpand</span></code> 的代码中，当字典扩展完毕之后，字典会同时使用两个哈希表（ <code class="docutils literal"><span class="pre">d-&gt;ht[0]</span></code> 和 <code class="docutils literal"><span class="pre">d-&gt;ht[1]</span></code> 都不为 <code class="docutils literal"><span class="pre">NULL</span></code> ），并且字典 <code class="docutils literal"><span class="pre">rehash</span></code> 属性的值为 <code class="docutils literal"><span class="pre">0</span></code> 。这意味着，可以开始对 0 号哈希表进行 rehash 操作了。</p>
+<p>Redis 对字典的 rehash 操作是通过将 0 号哈希表中的所有数据移动到 1 号哈希表来完成的，当移动完成， 0 号哈希表的数据被清空之后， 0 号哈希表的空间就会被释放，接着 Redis 会将原来的 1 号哈希表设置为新的 0 号哈希表。如果将来这个 0 号哈希表也不能满足储存需要，那么就再次执行 rehash 过程。</p>
+<p>需要说明的是，对字典的 rehash 并不是一次性地完成的，因为 0 号哈希表中的数据可能非常多，而一次性移动大量的数据必定对系统的性能产生严重影响。</p>
+<p>为此， Redis 采取了一种更平滑的 rehash 机制，Redis 文档里称之为渐增式 rehash （incremental rehashing）：它将 rehash 操作平摊到 <code class="docutils literal"><span class="pre">dictAddRaw</span></code> 、 <code class="docutils literal"><span class="pre">dictGetRandomKey</span></code> 、 <code class="docutils literal"><span class="pre">dictFind</span></code> 和 <code class="docutils literal"><span class="pre">dictGenericDelete</span></code> 这四个函数里面，每当上述这些函数执行的时候（或者其他函数调用它们的时候）， <code class="docutils literal"><span class="pre">_dictRehashStep</span></code> 函数就会被执行，它每次将 1 个元素从 0 号哈希表移动到 1 号哈希表：</p>
+<img alt="../../_images/incremental-rehashing-functions.png" src="../../_images/incremental-rehashing-functions.png" />
+<p>作为展示渐增式 rehash 的一个例子，以下是 <code class="docutils literal"><span class="pre">dictFind</span></code> 函数的定义：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">dictEntry</span> <span class="o">*</span><span class="nf">dictFind</span><span class="p">(</span><span class="n">dict</span> <span class="o">*</span><span class="n">d</span><span class="p">,</span> <span class="k">const</span> <span class="kt">void</span> <span class="o">*</span><span class="n">key</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// 被省略的代码...</span>
+
+    <span class="c1">// 检查字典(的哈希表)能否执行 rehash 操作</span>
+    <span class="c1">// 如果可以的话，执行平摊 rehash 操作</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">dictIsRehashing</span><span class="p">(</span><span class="n">d</span><span class="p">))</span> <span class="n">_dictRehashStep</span><span class="p">(</span><span class="n">d</span><span class="p">);</span>
+
+    <span class="c1">// 被省略的代码...</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>其中 <code class="docutils literal"><span class="pre">dictIsRehashing</span></code> 是一个宏，它检查字典的 <code class="docutils literal"><span class="pre">rehashidx</span></code> 属性是否不为 <code class="docutils literal"><span class="pre">-1</span></code> ：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#define dictIsRehashing(ht) ((ht)-&gt;rehashidx != -1)</span>
+</pre></div>
+</div>
+<p>如果条件成立成立的话， <code class="docutils literal"><span class="pre">_dictRehashStep</span></code> 就会被执行，将一个元素从 0 号哈希表转移到 1 号哈希表：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="k">static</span> <span class="kt">void</span> <span class="nf">_dictRehashStep</span><span class="p">(</span><span class="n">dict</span> <span class="o">*</span><span class="n">d</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">d</span><span class="o">-&gt;</span><span class="n">iterators</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="n">dictRehash</span><span class="p">(</span><span class="n">d</span><span class="p">,</span><span class="mi">1</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">_dictRehashStep</span></code> 定义中的 <code class="docutils literal"><span class="pre">iterators</span> <span class="pre">==</span> <span class="pre">0</span></code> 检查表示，当有迭代器在处理字典的时候，不能进行 rehash ，因为迭代器可能会修改字典中的元素，从而造成 rehash 错误。</p>
+<p>就这样，如同愚公移山一般， 0 号哈希表的元素被逐个逐个地移动到 1 号哈希表，最终整个 0 号哈希表被清空，当 <code class="docutils literal"><span class="pre">_dictRehashStep</span></code> 再调用 <code class="docutils literal"><span class="pre">dictRehash</span></code> 时，被清空的 0 号哈希表就会被删除，然后原来的 1 号哈希表成为新的 0 号哈希表。</p>
+<p>当有需要再次进行 rehash 的时候，这个循环就会再次开始。</p>
+<p>以下是 <code class="docutils literal"><span class="pre">dictRehash</span></code> 函数的完整实现，它清晰地说明了如何轮换 0 号哈希表和 1 号哈希表，以及，如何将 0 号哈希表的元素 rehash 到 1 号哈希表：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cm">/* Performs N steps of incremental rehashing. Returns 1 if there are still</span>
+<span class="cm"> * keys to move from the old to the new hash table, otherwise 0 is returned.</span>
+<span class="cm"> * Note that a rehashing step consists in moving a bucket (that may have more</span>
+<span class="cm"> * thank one key as we use chaining) from the old to the new hash table. */</span>
+<span class="kt">int</span> <span class="nf">dictRehash</span><span class="p">(</span><span class="n">dict</span> <span class="o">*</span><span class="n">d</span><span class="p">,</span> <span class="kt">int</span> <span class="n">n</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">dictIsRehashing</span><span class="p">(</span><span class="n">d</span><span class="p">))</span> <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+
+    <span class="k">while</span><span class="p">(</span><span class="n">n</span><span class="o">--</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">dictEntry</span> <span class="o">*</span><span class="n">de</span><span class="p">,</span> <span class="o">*</span><span class="n">nextde</span><span class="p">;</span>
+
+        <span class="c1">// 如果 0 号哈希表为空，使用 1 号哈希表代替它</span>
+        <span class="cm">/* Check if we already rehashed the whole table... */</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">used</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">zfree</span><span class="p">(</span><span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">table</span><span class="p">);</span>
+            <span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">1</span><span class="p">];</span>
+            <span class="n">_dictReset</span><span class="p">(</span><span class="o">&amp;</span><span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">1</span><span class="p">]);</span>
+            <span class="n">d</span><span class="o">-&gt;</span><span class="n">rehashidx</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+            <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+        <span class="p">}</span>
+
+        <span class="c1">// 进行 rehash</span>
+        <span class="cm">/* Note that rehashidx can&#39;t overflow as we are sure there are more</span>
+<span class="cm">         * elements because ht[0].used != 0 */</span>
+        <span class="n">assert</span><span class="p">(</span><span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">size</span> <span class="o">&gt;</span> <span class="p">(</span><span class="kt">unsigned</span><span class="p">)</span><span class="n">d</span><span class="o">-&gt;</span><span class="n">rehashidx</span><span class="p">);</span>
+        <span class="k">while</span><span class="p">(</span><span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">table</span><span class="p">[</span><span class="n">d</span><span class="o">-&gt;</span><span class="n">rehashidx</span><span class="p">]</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span> <span class="n">d</span><span class="o">-&gt;</span><span class="n">rehashidx</span><span class="o">++</span><span class="p">;</span>
+        <span class="n">de</span> <span class="o">=</span> <span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">table</span><span class="p">[</span><span class="n">d</span><span class="o">-&gt;</span><span class="n">rehashidx</span><span class="p">];</span>
+        <span class="cm">/* Move all the keys in this bucket from the old to the new hash HT */</span>
+        <span class="k">while</span><span class="p">(</span><span class="n">de</span><span class="p">)</span> <span class="p">{</span>
+            <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">h</span><span class="p">;</span>
+
+            <span class="n">nextde</span> <span class="o">=</span> <span class="n">de</span><span class="o">-&gt;</span><span class="n">next</span><span class="p">;</span>
+            <span class="cm">/* Get the index in the new hash table */</span>
+            <span class="n">h</span> <span class="o">=</span> <span class="n">dictHashKey</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="n">de</span><span class="o">-&gt;</span><span class="n">key</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">1</span><span class="p">].</span><span class="n">sizemask</span><span class="p">;</span>
+            <span class="n">de</span><span class="o">-&gt;</span><span class="n">next</span> <span class="o">=</span> <span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">1</span><span class="p">].</span><span class="n">table</span><span class="p">[</span><span class="n">h</span><span class="p">];</span>
+            <span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">1</span><span class="p">].</span><span class="n">table</span><span class="p">[</span><span class="n">h</span><span class="p">]</span> <span class="o">=</span> <span class="n">de</span><span class="p">;</span>
+            <span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">used</span><span class="o">--</span><span class="p">;</span>
+            <span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">1</span><span class="p">].</span><span class="n">used</span><span class="o">++</span><span class="p">;</span>
+            <span class="n">de</span> <span class="o">=</span> <span class="n">nextde</span><span class="p">;</span>
+        <span class="p">}</span>
+        <span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">table</span><span class="p">[</span><span class="n">d</span><span class="o">-&gt;</span><span class="n">rehashidx</span><span class="p">]</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+        <span class="n">d</span><span class="o">-&gt;</span><span class="n">rehashidx</span><span class="o">++</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>另外，还有一个确保 rehash 得以最终完成的重要条件，那就是 —— 当 <code class="docutils literal"><span class="pre">rehashidx</span></code> 不等于 <code class="docutils literal"><span class="pre">-1</span></code> ，也即是 <code class="docutils literal"><span class="pre">dictIsRehashing</span></code> 为真时，所有新添加的元素都会直接被加到 1 号数据库，这样 0 号哈希表的大小就会只减不增，最终 rehash 总会有完成的一刻（假如新加入的元素还继续被放进 0 号哈希表，那么尽管平摊 rehash 一直在努力地进行，但说不定 rehash 还是永远也完成不了）：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">dictEntry</span> <span class="o">*</span><span class="nf">dictAddRaw</span><span class="p">(</span><span class="n">dict</span> <span class="o">*</span><span class="n">d</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">key</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// 被省略的代码...</span>
+
+    <span class="c1">// 如果字典正在进行 rehash ，那么将新元素添加到 1 号哈希表，</span>
+    <span class="c1">// 否则，使用 0 号哈希表</span>
+    <span class="n">ht</span> <span class="o">=</span> <span class="n">dictIsRehashing</span><span class="p">(</span><span class="n">d</span><span class="p">)</span> <span class="o">?</span> <span class="o">&amp;</span><span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">:</span> <span class="o">&amp;</span><span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
+
+    <span class="c1">// 被省略的代码...</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>另外，除了 <code class="docutils literal"><span class="pre">_dictRehashStep</span></code> 以及 <code class="docutils literal"><span class="pre">dictAddRaw</span></code> 的特殊处理之外，Redis 还会在每次事件中断器运行的时候，执行一个为时一毫秒的 <code class="docutils literal"><span class="pre">rehash</span></code> 操作，在文件 <code class="docutils literal"><span class="pre">redis.c</span></code> 中的 <code class="docutils literal"><span class="pre">serverCron</span></code> 函数中记录了这一点。</p>
+</div>
+<div class="section" id="id6">
+<h2>哈希表的大小<a class="headerlink" href="#id6" title="Permalink to this headline">¶</a></h2>
+<p>在介绍完哈希表的使用流程和 rehash 机制之后，最后一个需要探索的地方就是哈希表的大小了。</p>
+<p>我们知道哈希表最初的大小是由 <code class="docutils literal"><span class="pre">DICT_HT_INITIAL_SIZE</span></code> 常量决定的，而当 rehash 开始之后，根据给定的条件，哈希表的大小就会发生变动：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="k">static</span> <span class="kt">int</span> <span class="nf">_dictExpandIfNeeded</span><span class="p">(</span><span class="n">dict</span> <span class="o">*</span><span class="n">d</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// 被省略的代码...</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">used</span> <span class="o">&gt;=</span> <span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">size</span> <span class="o">&amp;&amp;</span>
+        <span class="p">(</span><span class="n">dict_can_resize</span> <span class="o">||</span>
+         <span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">used</span><span class="o">/</span><span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">size</span> <span class="o">&gt;</span> <span class="n">dict_force_resize_ratio</span><span class="p">))</span>
+    <span class="p">{</span>
+        <span class="k">return</span> <span class="n">dictExpand</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="p">((</span><span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">size</span> <span class="o">&gt;</span> <span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">used</span><span class="p">)</span> <span class="o">?</span>
+        <span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="nl">size</span> <span class="p">:</span> <span class="n">d</span><span class="o">-&gt;</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">used</span><span class="p">)</span><span class="o">*</span><span class="mi">2</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="c1">// 被省略的代码...</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>可以看到， <code class="docutils literal"><span class="pre">d-&gt;ht[0].size</span></code> 和 <code class="docutils literal"><span class="pre">d-&gt;ht[0].used</span></code> 两个数之间的较大者乘以 <code class="docutils literal"><span class="pre">2</span></code> ，会作为 <code class="docutils literal"><span class="pre">size</span></code> 参数的值被传入 <code class="docutils literal"><span class="pre">dictExpand</span></code> 函数。</p>
+<p>但是，尽管如此，这个数值仍然还不是哈希表的最终大小，因为在 <code class="docutils literal"><span class="pre">dictExpand</span></code> 里面，真正的哈希表大小需要 <code class="docutils literal"><span class="pre">_dictNextPower</span></code> 函数根据传入的 <code class="docutils literal"><span class="pre">size</span></code> 参数计算之后才能得出：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="kt">int</span> <span class="nf">dictExpand</span><span class="p">(</span><span class="n">dict</span> <span class="o">*</span><span class="n">d</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">size</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// 被省略的代码...</span>
+
+    <span class="c1">// 计算哈希表的(真正)大小</span>
+    <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">realsize</span> <span class="o">=</span> <span class="n">_dictNextPower</span><span class="p">(</span><span class="n">size</span><span class="p">);</span>
+
+    <span class="c1">// 被省略的代码...</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">_dictNextPower</span></code> 不断计算 2 的乘幂，直到遇到大于等于 <code class="docutils literal"><span class="pre">size</span></code> 参数的乘幂，就返回这个乘幂作为哈希表的大小：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="k">static</span> <span class="kt">unsigned</span> <span class="kt">long</span> <span class="nf">_dictNextPower</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">size</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">i</span> <span class="o">=</span> <span class="n">DICT_HT_INITIAL_SIZE</span><span class="p">;</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">size</span> <span class="o">&gt;=</span> <span class="n">LONG_MAX</span><span class="p">)</span> <span class="k">return</span> <span class="n">LONG_MAX</span><span class="p">;</span>
+    <span class="k">while</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">i</span> <span class="o">&gt;=</span> <span class="n">size</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">i</span><span class="p">;</span>
+        <span class="n">i</span> <span class="o">*=</span> <span class="mi">2</span><span class="p">;</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>虽然桶的元素个数 <code class="docutils literal"><span class="pre">d-&gt;ht[0].size</span></code> 刚开始是固定的( <code class="docutils literal"><span class="pre">DICT_HT_INITIAL_SIZE</span></code> )，但是，因为我们没有办法预知 <code class="docutils literal"><span class="pre">d-&gt;ht[0].used</span></code> 的值，所以我们没有办法准确预估新哈希表的大小，不过，我们可以确定以下两个关于哈希表大小的性质：</p>
+<ol class="arabic simple">
+<li>哈希表的大小总是 2 的乘幂（也即是 2^N，此处 N 未知）</li>
+<li>1 号哈希表的大小总比 0 号哈希表大</li>
+</ol>
+</div>
+<div class="section" id="id7">
+<h2>小结<a class="headerlink" href="#id7" title="Permalink to this headline">¶</a></h2>
+<p>以上就是 Redis 字典结构的实现分析了，因为边幅所限，这里展示的函数多数都只贴出了主要部分的代码，如果对所有代码的细节感兴趣，可以到我的 GITHUB 上去找带有完整注释的代码： <a class="reference external" href="https://github.com/huangz1990/reading_redis_source">https://github.com/huangz1990/reading_redis_source</a></p>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">字典</a><ul>
+<li><a class="reference internal" href="#id2">字典实现的数据结构</a></li>
+<li><a class="reference internal" href="#id3">创建字典</a></li>
+<li><a class="reference internal" href="#id4">哈希表链表的创建流程</a></li>
+<li><a class="reference internal" href="#id5">字典的扩展，以及 1 号哈希表的创建</a></li>
+<li><a class="reference internal" href="#rehash">渐进式 rehash ，以及平摊操作</a></li>
+<li><a class="reference internal" href="#id6">哈希表的大小</a></li>
+<li><a class="reference internal" href="#id7">小结</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="adlist.html"
+                        title="previous chapter">双链表</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="sds.html"
+                        title="next chapter">SDS 结构</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

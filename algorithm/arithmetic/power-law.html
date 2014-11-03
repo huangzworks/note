@@ -1,0 +1,165 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>幂次定律 —— Power Law &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="up" title="算术" href="index.html" />
+    <link rel="next" title="指数补偿 —— Exponential backoff" href="exponential-backoff.html" />
+    <link rel="prev" title="算术" href="index.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="exponential-backoff.html" title="指数补偿 —— Exponential backoff"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="算术"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">算术</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="power-law">
+<h1>幂次定律 —— Power Law<a class="headerlink" href="#power-law" title="Permalink to this headline">¶</a></h1>
+<p>如果某件事的发生频率和它的某个属性成幂关系，那么这个频率就可以称之为符合幂次定律。</p>
+<p>幂次定律的表现是，
+<em>少数几个事件的发生频率占了整个发生频率的大部分， 而其余的大多数事件只占整个发生频率的一个小部分</em>，
+如图：</p>
+<div class="figure" id="id4">
+<img alt="../../_images/power-law.png" src="../../_images/power-law.png" />
+<p class="caption"><span class="caption-text">右边黄色为长尾，左边绿色为占主宰地位的少数事件。（图片来源于维基百科）</span><a class="headerlink" href="#id4" title="Permalink to this image">¶</a></p>
+</div>
+<p>详细信息请参考维基百科的 <a class="reference external" href="http://en.wikipedia.org/wiki/Power_law">Power Law 词条</a> 。</p>
+<p>MMDays 博客的<a class="reference external" href="http://mmdays.com/2008/11/22/power_law_1/">《淺談網路世界的Power Law現象》</a>一系列文章也是很好的资料。</p>
+<div class="section" id="id3">
+<h2>应用示例<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<p>在 Redis 的 <code class="docutils literal"><span class="pre">t_zset.c</span></code> 模块中，跳跃表层数的随机值就由符合幂次定律的函数定义，
+数值越大，函数生成它的几率就越小：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cm">/* Returns a random level for the new skiplist node we are going to create.</span>
+<span class="cm"> * The return value of this function is between 1 and ZSKIPLIST_MAXLEVEL</span>
+<span class="cm"> * (both inclusive), with a powerlaw-alike distribution where higher</span>
+<span class="cm"> * levels are less likely to be returned.</span>
+<span class="cm"> *</span>
+<span class="cm"> * 返回一个介于 1 和 ZSKIPLIST_MAXLEVEL 之间的随机值，作为节点的层数。</span>
+<span class="cm"> */</span>
+<span class="cp">#define ZSKIPLIST_P 0.25</span>
+<span class="cp">#define ZSKIPLIST_MAXLEVEL 32</span>
+<span class="kt">int</span> <span class="nf">zslRandomLevel</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">int</span> <span class="n">level</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="k">while</span> <span class="p">((</span><span class="n">random</span><span class="p">()</span><span class="o">&amp;</span><span class="mh">0xFFFF</span><span class="p">)</span> <span class="o">&lt;</span> <span class="p">(</span><span class="n">ZSKIPLIST_P</span> <span class="o">*</span> <span class="mh">0xFFFF</span><span class="p">))</span>
+        <span class="n">level</span> <span class="o">+=</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">level</span><span class="o">&lt;</span><span class="n">ZSKIPLIST_MAXLEVEL</span><span class="p">)</span> <span class="o">?</span> <span class="nl">level</span> <span class="p">:</span> <span class="n">ZSKIPLIST_MAXLEVEL</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">幂次定律 —— Power Law</a><ul>
+<li><a class="reference internal" href="#id3">应用示例</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="index.html"
+                        title="previous chapter">算术</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="exponential-backoff.html"
+                        title="next chapter">指数补偿 —— Exponential backoff</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

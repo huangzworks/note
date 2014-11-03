@@ -1,0 +1,287 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>第二章：从新手到专家的例程 &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="up" title="《程序员的思维修炼》 笔记" href="index.html" />
+    <link rel="next" title="第三章：认识你的大脑" href="chp3.html" />
+    <link rel="prev" title="《程序员的思维修炼》 笔记" href="index.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="chp3.html" title="第三章：认识你的大脑"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="《程序员的思维修炼》 笔记"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">《程序员的思维修炼》 笔记</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>第二章：从新手到专家的例程<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="dreyfus-model">
+<h2>德雷福斯模型（Dreyfus model）的五个阶段<a class="headerlink" href="#dreyfus-model" title="Permalink to this headline">¶</a></h2>
+<p>德雷福斯兄弟定义了德雷福斯模型，
+概括了从新手到专家必须经历的 5 个阶段，
+包括：</p>
+<ol class="arabic simple">
+<li>新手（novice）</li>
+<li>高级新手（advanced beginner）</li>
+<li>胜任者（competent）</li>
+<li>精通者（proficient）</li>
+<li>专家（expert）</li>
+</ol>
+<p>他们的研究表明，
+从新手到专家要经历巨大的变化。</p>
+<p>在这个过程中，
+人们不只是“获得了更多知识”，
+或者学会了某些技术，
+而且还在如何认识世界、
+如何解决问题、
+以及如何形成（form）和使用思维模型等方面体验到根本性的区别。
+人们获取新技术的方式发生了改变，
+影响（促进或阻碍）人们工作业绩的外部因素也发生了变化。</p>
+</div>
+<div class="section" id="id2">
+<h2>阶段一：新手<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>新手的表现如下：</p>
+<ol class="arabic simple">
+<li>在该技能领域经验很少，或者根本没有经验。</li>
+<li>想要立即知道答案，是对还是错。</li>
+<li>不是特别想要学习，他们想要一个立竿见影的目标。</li>
+<li>不知道如何应付错误，出错会让对他们造成慌乱。</li>
+</ol>
+<p>通过给新手一份指令清单（recipe），
+指示“如果发生 X ，那么执行 Y ”，
+他们的效率可以显著地提高。</p>
+<p>但是这种问题的做法是，
+有时候新手可能不知道执行哪条规则的效果才是最好的；
+除此之外，
+规则无法做到尽善尽美，
+当事件的情况超出规则之外时，
+新手就会不知所措。</p>
+</div>
+<div class="section" id="id3">
+<h2>阶段二：高级新手<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<p>高级新手的表现如下：</p>
+<ol class="arabic simple">
+<li>开始多多少少摆脱固定的规则，可以独自尝试任务，但仍然难以解决问题。</li>
+<li>想要快速获取信息。</li>
+<li>能够根据过去的经验，逐步在正确的情境中采纳建议，但比较吃力。</li>
+<li>开始形成一些总体原则，但不是“全貌”。</li>
+<li>没有全面理解能力，而且也不想有；如果试图将一个更大的情境强加给他们，那么他们可能会认为该情境和原则不相关，从而将情境忽略掉。</li>
+</ol>
+</div>
+<div class="section" id="id4">
+<h2>阶段三：胜任者<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h2>
+<p>胜任者的表现如下：</p>
+<ol class="arabic simple">
+<li>能够建立问题领域的概念模型，并有效地使用它们。</li>
+<li>可以独立解决自己遇到的问题，并开始考虑如何解决新问题 —— 那些他们之前没有遇到过的问题。</li>
+<li>开始寻求和运用专家的意见，并有效地利用。</li>
+<li>基于谨慎的计划和过去的经验来解决问题，如果没有更多的经验，在解决问题时他们将难以确定关注哪些细节。</li>
+</ol>
+<p>胜任者通常在团队中发挥领导作用，
+他们既可以指导新手，
+也不会经常骚扰专家。</p>
+</div>
+<div class="section" id="id5">
+<h2>阶段四：精通者<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h2>
+<p>精通者的表现如下：</p>
+<ol class="arabic simple">
+<li>他们需要全局思维，围绕这个技术，寻找并想了解更大的概念模型，对于简单化的信息，他们会非常沮丧。</li>
+<li>能够矫正以往不好的工作表现，他们会反思以前是如何做的，并修改其做法，期待下次表现得更好。到了这个阶段，自我改进才会出现。</li>
+<li>学习他人的经验，从故事中认真学习，即使没有亲自参与。</li>
+<li>能够理解、并在情境下使用格言、经验之谈、诀窍、谚语，等等（比如， Don&#8217;t Repeat Yourself）。</li>
+<li>拥有足够的经验，可以按情况采取适当的行动，并对情况进行预测。</li>
+<li>知道较低水平的从业者所不知道的高级技巧。</li>
+</ol>
+</div>
+<div class="section" id="id6">
+<h2>阶段五：专家<a class="headerlink" href="#id6" title="Permalink to this headline">¶</a></h2>
+<p>专家的表现如下：</p>
+<ol class="arabic simple">
+<li>他们是各个领域知识和信息的主要来源。</li>
+<li>他们不断地寻找更好的方法和方式去做事。</li>
+<li>经验丰富，可以在恰当的情境中应用这些经验。</li>
+<li>根据直觉工作，而不需要理由。但是，他们通常很难解释清楚直觉（以及相关的结论）从何而来。</li>
+<li>擅长做有针对性的特征匹配：知道那些是无关紧要的细节，那些是非常重要的细节。</li>
+</ol>
+</div>
+<div class="section" id="id7">
+<h2>现实中的德雷福斯模型<a class="headerlink" href="#id7" title="Permalink to this headline">¶</a></h2>
+<p><strong>当你在某个领域不是很擅长的时候，
+你更可能认为自己是这方面的专家。</strong></p>
+<p>缺少准确的自我评估，
+被称为二阶不胜任（second-order incompetence），
+也即是，不知道自己不知道。</p>
+<p>一旦你真的称为了一名专家，
+你会痛苦地意识到你知道的是多么少。</p>
+<p>专家给新手制定规则，
+可以帮助新手显著地提升业绩，
+但是，
+如果要求专家按自己所指定的规则来行动，
+则反而会影响专家自己的表现。</p>
+<p>直觉是专家的工具，
+而新手则需要明确的指示。</p>
+<p>从新手到专家，
+最重要的三个变化：</p>
+<img alt="../../_images/dreyfus-model-of-skill-acquisition.png" src="../../_images/dreyfus-model-of-skill-acquisition.png" />
+<p>研究似乎表明，
+<strong>大多数人的大多数技能，
+在他们生命的大多数时间里，
+从来没有高于第二阶段（高级新手）</strong>：
+很多人只是执行他们需要做的任务并根据需要学习新任务，
+但是从来没有对任务环境获得更广泛的、概念上的理解。</p>
+<p>元认知（metacognitive）能力，
+或者自我认知的能力，
+往往在比较高的技能层次才会具有，
+处于低水平的人常常高估他们自己的能力，
+而正确自我评估的唯一办法就是提高个人技能层次，
+这反过来又会提高元认知能力。</p>
+</div>
+<div class="section" id="id8">
+<h2>有效地使用德雷福斯模型<a class="headerlink" href="#id8" title="Permalink to this headline">¶</a></h2>
+<p>积极的实践需要以下四个条件：</p>
+<ol class="arabic simple">
+<li>需要一个明确定义的任务</li>
+<li>任务需要有适当难度 —— 有挑战、但可行</li>
+<li>任务环境可以提供大量反馈，以便你采取行动</li>
+<li>提供重复犯错和纠正错误的机会</li>
+</ol>
+<p>培养高级新手，
+帮助他们把水平提高到胜任者层次。
+有助于实现这个目标的主要方法是在环境中有好的榜样，
+让高级新手通过观察和模仿高水平的人来学习。</p>
+<p>新手需要梯子，
+但是优胜者不会在乎失败者 —— 失败者会被团队抛弃。</p>
+<p>编程专家必须持续编程，
+并找到一个有意义的、有价值的职业生涯，
+通过实践来维持专家水平。</p>
+</div>
+<div class="section" id="id9">
+<h2>考虑情境<a class="headerlink" href="#id9" title="Permalink to this headline">¶</a></h2>
+<p>在进行判断时要将情境要考虑进去，
+脱离情境的客观性存在固有危险。</p>
+<p>举个例子，某种技术可能非常优秀，但如果你们团队里没有一个人了解这项技术，那么在使用这种技术之前就要三思而后行。</p>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">第二章：从新手到专家的例程</a><ul>
+<li><a class="reference internal" href="#dreyfus-model">德雷福斯模型（Dreyfus model）的五个阶段</a></li>
+<li><a class="reference internal" href="#id2">阶段一：新手</a></li>
+<li><a class="reference internal" href="#id3">阶段二：高级新手</a></li>
+<li><a class="reference internal" href="#id4">阶段三：胜任者</a></li>
+<li><a class="reference internal" href="#id5">阶段四：精通者</a></li>
+<li><a class="reference internal" href="#id6">阶段五：专家</a></li>
+<li><a class="reference internal" href="#id7">现实中的德雷福斯模型</a></li>
+<li><a class="reference internal" href="#id8">有效地使用德雷福斯模型</a></li>
+<li><a class="reference internal" href="#id9">考虑情境</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="index.html"
+                        title="previous chapter">《程序员的思维修炼》 笔记</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="chp3.html"
+                        title="next chapter">第三章：认识你的大脑</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

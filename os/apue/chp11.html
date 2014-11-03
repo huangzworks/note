@@ -1,0 +1,333 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>第 11 章：线程 &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="up" title="《UNIX 环境高级编程》笔记" href="index.html" />
+    <link rel="next" title="第 14 章：高级 I/O" href="chp14.html" />
+    <link rel="prev" title="第 10 章：信号" href="chp10.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="chp14.html" title="第 14 章：高级 I/O"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="chp10.html" title="第 10 章：信号"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">《UNIX 环境高级编程》笔记</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>第 11 章：线程<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<p>线程是一个进程中的控制和执行单元（unit），
+传统的 UNIX 进程可以看成是只有一个控制线程：
+在同一时刻，它只能做一件事。</p>
+<p>通过在进程中创建多个线程，
+可以并发地完成多个不同的任务。</p>
+<p>进程的所有信息对该进程的所有线程都是共享的，
+包括可执行的程序文本、程序的全局内存和堆内存、栈以及文件描述符。</p>
+<p>多线程的用途和好处包括：</p>
+<ul class="simple">
+<li>使用同步代码，实现异步效果。</li>
+<li>实现简单的进程间通讯和数据共享。</li>
+<li>将多个任务并行化，提高效率，减少阻塞。比如一个编辑器可以用一个线程接受用户的输入，另一个线程写入数据，第三个线程进行备份，等等。</li>
+</ul>
+<p>当然，多线程也带来了一些难题，
+其中最重要的就是因为共享数据而带来的数据一致性问题，
+以及线程之间的同步，等等。</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">多线程和多处理器并没有直接关系，
+即使使用的是单处理器，也可以从多线程中获益。</p>
+</div>
+<div class="section" id="id2">
+<h2>创建线程<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p><code class="docutils literal"><span class="pre">pthread_create</span></code> 函数用于创建新线程：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#include &lt;pthread.h&gt;</span>
+
+<span class="c1">// 创建成功返回 0 ，否则返回错误编号</span>
+<span class="kt">int</span> <span class="nf">pthread_create</span><span class="p">(</span><span class="kt">pthread_t</span> <span class="o">*</span><span class="kr">thread</span><span class="p">,</span>               <span class="c1">// 保存新线程的 id</span>
+                   <span class="k">const</span> <span class="kt">pthread_attr_t</span> <span class="o">*</span><span class="n">attr</span><span class="p">,</span>      <span class="c1">// 定制线程的属性</span>
+                   <span class="kt">void</span> <span class="o">*</span><span class="p">(</span><span class="o">*</span><span class="n">start_routine</span><span class="p">)</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">),</span> <span class="c1">// 线程要执行的函数</span>
+                   <span class="kt">void</span> <span class="o">*</span><span class="n">arg</span><span class="p">);</span>                      <span class="c1">// 传给函数的参数</span>
+</pre></div>
+</div>
+<p>和创建进程类似，
+系统并不保证新线程和原有线程之间那个会先执行，
+所以线程程序一定要有相应的同步措施，
+并且线程所执行的程序不能依赖于特定的执行顺序。</p>
+<p>另外，
+线程相关函数出错时，
+通常以返回错误代码而不是设置 <code class="docutils literal"><span class="pre">errno</span></code> 的方式来报告错误，
+这样更简洁一些。</p>
+<p><code class="docutils literal"><span class="pre">pthread_self</span></code> 函数用于返回线程的 id ，同一个进程的线程 id 是唯一的：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#include &lt;pthread.h&gt;</span>
+
+<span class="kt">pthread_t</span> <span class="nf">pthread_self</span><span class="p">(</span><span class="kt">void</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>以下是书本提供的，创建新线程并打印线程 id 的示例代码：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// 11-1.c</span>
+
+<span class="cp">#include &quot;apue.h&quot;</span>
+<span class="cp">#include &lt;pthread.h&gt;</span>
+
+<span class="kt">pthread_t</span> <span class="n">ntid</span><span class="p">;</span>
+
+<span class="c1">// 打印进程 id 和线程 id</span>
+<span class="kt">void</span>
+<span class="nf">printids</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">s</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="kt">pid_t</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">getpid</span><span class="p">();</span>
+
+    <span class="kt">pthread_t</span> <span class="n">tid</span> <span class="o">=</span> <span class="n">pthread_self</span><span class="p">();</span>
+
+    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;%s pid %u tid %u (0x%x)</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span>
+           <span class="n">s</span><span class="p">,</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="kt">int</span><span class="p">)</span> <span class="n">pid</span><span class="p">,</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="kt">int</span><span class="p">)</span> <span class="n">tid</span><span class="p">,</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="kt">int</span><span class="p">)</span> <span class="n">tid</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="c1">// 新线程的执行函数</span>
+<span class="kt">void</span> <span class="o">*</span>
+<span class="nf">thr_fn</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">arg</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">printids</span><span class="p">(</span><span class="s">&quot;new thread: &quot;</span><span class="p">);</span>
+    <span class="k">return</span> <span class="p">((</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="mi">0</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">int</span>
+<span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="kt">int</span> <span class="n">err</span> <span class="o">=</span> <span class="n">pthread_create</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ntid</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="n">thr_fn</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">err</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="n">err_quit</span><span class="p">(</span><span class="s">&quot;can&#39;t create thread: %s</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">strerror</span><span class="p">(</span><span class="n">err</span><span class="p">));</span>
+
+    <span class="n">printids</span><span class="p">(</span><span class="s">&quot;main thread:&quot;</span><span class="p">);</span>
+
+    <span class="c1">// 等待子线程完成</span>
+    <span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+
+    <span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>以下是代码的执行结果（记得编译的时候要带上 <code class="docutils literal"><span class="pre">-lpthread</span></code> ）：</p>
+<div class="highlight-c"><div class="highlight"><pre>$ ./11-1.out
+main thread: pid 3729 tid 3075602112 (0xb751f6c0)
+new thread:  pid 3729 tid 3075599168 (0xb751eb40)
+</pre></div>
+</div>
+</div>
+<div class="section" id="id3">
+<h2>终止线程<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<p>线程有以下两种外部/自然终止方式：</p>
+<ul class="simple">
+<li>进程中的任一线程调用了 <code class="docutils literal"><span class="pre">exit</span></code> 、 <code class="docutils literal"><span class="pre">_Exit</span></code> 或者 <code class="docutils literal"><span class="pre">_exit</span></code> ，那么整个进程终止。</li>
+<li>如果信号的默认动作是终止进程，那么把该信号发送到某个线程会导致整个进程终止。</li>
+</ul>
+<p>还有以下三种线程主动终止的方式：</p>
+<ul class="simple">
+<li>线程执行完毕，从调用例程中返回，终止它的控制流，但不影响整个进程。</li>
+<li>线程被同一进程的其他线程取消。</li>
+<li>线程调用 <code class="docutils literal"><span class="pre">pthread_exit</span></code> 。</li>
+</ul>
+<p>除非某个线程是进程的最后一个线程，
+否则，
+当一个线程终止时，
+它所共享的进程资源不会被释放，
+<code class="docutils literal"><span class="pre">atexit</span></code> 也不会被调用。</p>
+<p><code class="docutils literal"><span class="pre">pthread_exit</span></code> 的签名如下：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#include &lt;pthread.h&gt;</span>
+
+<span class="kt">void</span> <span class="nf">pthread_exit</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">retval</span><span class="p">);</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">retval</span></code> 用于向使用 <code class="docutils literal"><span class="pre">pthread_join</span></code> 等待这个线程的另一个线程返回值。</p>
+<p><code class="docutils literal"><span class="pre">pthread_join</span></code> 将调用线程阻塞，直到指定的线程终止为止，它的签名如下：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#include &lt;pthread.h&gt;</span>
+
+<span class="c1">// 成功返回 0 ，否则返回错误代码</span>
+<span class="kt">int</span> <span class="nf">pthread_join</span><span class="p">(</span><span class="kt">pthread_t</span> <span class="kr">thread</span><span class="p">,</span> <span class="kt">void</span> <span class="o">**</span><span class="n">retval</span><span class="p">);</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">thread</span></code> 是等待的目标线程， <code class="docutils literal"><span class="pre">retval</span></code> 用于保存目标线程的返回值。</p>
+<p>以下是书本提供的，测试线程退出的例程：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// 11-2.c</span>
+
+<span class="cp">#include &quot;apue.h&quot;</span>
+<span class="cp">#include &lt;pthread.h&gt;</span>
+
+<span class="kt">void</span> <span class="o">*</span>
+<span class="nf">thr_fn1</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">arg</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;thread 1 returning</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+    <span class="k">return</span> <span class="p">((</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span> <span class="mi">0</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="o">*</span>
+<span class="nf">thr_fn2</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">arg</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;thread 2 exiting</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+    <span class="n">pthread_exit</span><span class="p">((</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span> <span class="mi">2</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">int</span> 
+<span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="kt">int</span> <span class="n">err</span><span class="p">;</span>
+    <span class="kt">pthread_t</span> <span class="n">tid1</span><span class="p">,</span> <span class="n">tid2</span><span class="p">;</span>
+    <span class="kt">void</span> <span class="o">*</span><span class="n">tret</span><span class="p">;</span>
+
+    <span class="c1">// 创建线程 1</span>
+    <span class="n">err</span> <span class="o">=</span> <span class="n">pthread_create</span><span class="p">(</span><span class="o">&amp;</span><span class="n">tid1</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="n">thr_fn1</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">err</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="n">err_quit</span><span class="p">(</span><span class="s">&quot;create thread 1 fail</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">strerror</span><span class="p">(</span><span class="n">err</span><span class="p">));</span>
+
+    <span class="c1">// 创建线程 2</span>
+    <span class="n">err</span> <span class="o">=</span> <span class="n">pthread_create</span><span class="p">(</span><span class="o">&amp;</span><span class="n">tid2</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="n">thr_fn2</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">err</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="n">err_quit</span><span class="p">(</span><span class="s">&quot;create thread 2 fail</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">strerror</span><span class="p">(</span><span class="n">err</span><span class="p">));</span>
+
+    <span class="c1">// 等待线程 1 执行完毕</span>
+    <span class="n">err</span> <span class="o">=</span> <span class="n">pthread_join</span><span class="p">(</span><span class="n">tid1</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">tret</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">err</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="n">err_quit</span><span class="p">(</span><span class="s">&quot;join thread 1 fail</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">strerror</span><span class="p">(</span><span class="n">err</span><span class="p">));</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;thread 1 exit code %d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="p">(</span><span class="kt">int</span><span class="p">)</span> <span class="n">tret</span><span class="p">);</span>
+
+    <span class="c1">// 等待线程 2 执行完毕</span>
+    <span class="n">err</span> <span class="o">=</span> <span class="n">pthread_join</span><span class="p">(</span><span class="n">tid2</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">tret</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">err</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="n">err_quit</span><span class="p">(</span><span class="s">&quot;join thread 2 fail</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">strerror</span><span class="p">(</span><span class="n">err</span><span class="p">));</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;thread 2 exit code %d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="p">(</span><span class="kt">int</span><span class="p">)</span> <span class="n">tret</span><span class="p">);</span>
+
+    <span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>执行结果：</p>
+<div class="highlight-c"><div class="highlight"><pre>$ ./11-2.out
+thread 1 returning
+thread 2 exiting
+thread 1 exit code 0
+thread 2 exit code 2
+</pre></div>
+</div>
+</div>
+<div class="section" id="id4">
+<h2>参考资料<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h2>
+<p><a class="reference external" href="https://computing.llnl.gov/tutorials/pthreads">https://computing.llnl.gov/tutorials/pthreads</a></p>
+<p>一个教程，很规范地列举了关于线程、mutex、条件变量等知识，以及 API 的使用方式。</p>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">第 11 章：线程</a><ul>
+<li><a class="reference internal" href="#id2">创建线程</a></li>
+<li><a class="reference internal" href="#id3">终止线程</a></li>
+<li><a class="reference internal" href="#id4">参考资料</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="chp10.html"
+                        title="previous chapter">第 10 章：信号</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="chp14.html"
+                        title="next chapter">第 14 章：高级 I/O</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

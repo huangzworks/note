@@ -1,0 +1,200 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>协议 &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="up" title="Clojure" href="index.html" />
+    <link rel="next" title="并发与并行" href="concurrency-and-parallelism.html" />
+    <link rel="prev" title="记录" href="record.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="concurrency-and-parallelism.html" title="并发与并行"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="record.html" title="记录"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Clojure</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>协议<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<p>Clojure 中的协议用于为类型定义一集操作。</p>
+<p>协议中的每个操作用一个方法（method）来定义，这个定义只提供方法的签名，但是并不包含该方法的实现。</p>
+<p>举个例子，以下名为 <code class="docutils literal"><span class="pre">QueueOperation</span></code> 的协议定义了队列类型常见的 <code class="docutils literal"><span class="pre">push</span></code> 和 <code class="docutils literal"><span class="pre">pop</span></code> 操作：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="p">(</span><span class="kd">defprotocol </span><span class="nv">QueueOperation</span>
+    <span class="s">&quot;队列的推入和弹出操作。&quot;</span>
+    <span class="p">(</span><span class="nf">push</span> <span class="p">[</span><span class="nv">queue</span> <span class="nv">item</span><span class="p">]</span>
+          <span class="s">&quot;将元素 item 推入队列 queue 中，</span>
+<span class="s">          新元素的摆放位置由队列的类型（FIFO/LIFP）来决定。&quot;</span>
+    <span class="p">)</span>
+    <span class="p">(</span><span class="nb">pop </span><span class="p">[</span><span class="nv">queue</span><span class="p">]</span>
+         <span class="s">&quot;从队列 queue 中弹出一个元素，</span>
+<span class="s">         弹出元素由队列的类型来决定，</span>
+<span class="s">         如果队列为空，返回 nil 。&quot;</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>因为一个协议可以被多种类型实现，而方法的分派（dispath）正是由方法的第一个参数的类型来决定的，因此协议中的方法必须至少带有一个参数（例子中是 <code class="docutils literal"><span class="pre">queue</span></code> ）。</p>
+<div class="section" id="id2">
+<h2>实现协议<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>前一节说过，协议可以由不同的类型来实现。</p>
+<p>在前面介绍记录的时候我们说过，记录拥有自己的类型，这里我们先来定义一个记录，再为这个类型实现给定的协议。</p>
+<p>一个基本的 FIFO （先进先出）队列的定义如下：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="p">(</span><span class="kd">defrecord </span><span class="nv">FifoQueue</span> <span class="p">[</span><span class="nv">container</span><span class="p">])</span>
+</pre></div>
+</div>
+<p>我们可以用一个向量作为这个 FIFO 队列的容器，从而创建 <code class="docutils literal"><span class="pre">FifoQueue</span></code> 记录的实例：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="k">def </span><span class="nv">q</span> <span class="p">(</span><span class="nf">-&gt;FifoQueue</span> <span class="p">[</span><span class="mi">1</span> <span class="mi">2</span> <span class="mi">3</span><span class="p">]))</span>
+<span class="o">#</span><span class="ss">&#39;user/q</span>
+
+<span class="nv">user=&gt;</span> <span class="nv">q</span>
+<span class="o">#</span><span class="nv">user.FifoQueue</span><span class="p">{</span><span class="ss">:container</span> <span class="p">[</span><span class="mi">1</span> <span class="mi">2</span> <span class="mi">3</span><span class="p">]}</span>
+</pre></div>
+</div>
+<p>要正确地实现这个 <code class="docutils literal"><span class="pre">FifoQueue</span></code> ，程序必须在调用 <code class="docutils literal"><span class="pre">push</span></code> 时将新元素放到向量的末尾，比如 <code class="docutils literal"><span class="pre">(push</span> <span class="pre">q</span> <span class="pre">4)</span></code> 应该会返回一个 <code class="docutils literal"><span class="pre">:container</span></code> 为 <code class="docutils literal"><span class="pre">[1</span> <span class="pre">2</span> <span class="pre">3</span> <span class="pre">4]</span></code> 的记录。</p>
+<p>另一方面， <code class="docutils literal"><span class="pre">pop</span></code> 操作被调用时，程序也需要将 <code class="docutils literal"><span class="pre">:container</span></code> 内的第一个元素弹出，比如说 <code class="docutils literal"><span class="pre">(pop</span> <span class="pre">q)</span></code> 应该会返回数字 <code class="docutils literal"><span class="pre">3</span></code> ，因为它是容器内的向量的最后一个元素。</p>
+<p>以下就是 <code class="docutils literal"><span class="pre">FifoQueue</span></code> 类型对 <code class="docutils literal"><span class="pre">QueueOperation</span></code> 协议的实现：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="p">(</span><span class="nf">extend-type</span> <span class="nv">FifoQueue</span>  <span class="c1">; 如果在 repl 中测试，那么全名为 user.FifoQueue</span>
+    <span class="nv">QueueOperation</span>
+        <span class="p">(</span><span class="nf">push</span> <span class="p">[</span><span class="nv">queue</span> <span class="nv">item</span><span class="p">]</span>
+            <span class="p">(</span><span class="k">let </span><span class="p">[</span>
+                    <span class="nb">vector </span><span class="p">(</span><span class="ss">:container</span> <span class="nv">queue</span><span class="p">)</span>
+                    <span class="nv">new-vector</span> <span class="p">(</span><span class="nb">conj vector </span><span class="nv">item</span><span class="p">)</span>
+                 <span class="p">]</span>
+                <span class="p">(</span><span class="nf">-&gt;FifoQueue</span> <span class="nv">new-vector</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+        <span class="p">(</span><span class="nb">pop </span><span class="p">[</span><span class="nv">queue</span><span class="p">]</span>
+            <span class="p">(</span><span class="k">let </span><span class="p">[</span><span class="nb">vector </span><span class="p">(</span><span class="ss">:container</span> <span class="nv">queue</span><span class="p">)]</span>
+                <span class="p">(</span><span class="nb">first </span><span class="nv">vector</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>以下代码测试了 <code class="docutils literal"><span class="pre">FifoQueue</span></code> 的实现：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="k">def </span><span class="nv">q</span> <span class="p">(</span><span class="nf">-&gt;FifoQueue</span> <span class="p">[</span><span class="mi">1</span> <span class="mi">2</span> <span class="mi">3</span><span class="p">]))</span>
+<span class="o">#</span><span class="ss">&#39;user/q</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">push</span> <span class="nv">q</span> <span class="mi">4</span><span class="p">)</span>
+<span class="o">#</span><span class="nv">user.FifoQueue</span><span class="p">{</span><span class="ss">:container</span> <span class="p">[</span><span class="mi">1</span> <span class="mi">2</span> <span class="mi">3</span> <span class="mi">4</span><span class="p">]}</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">pop </span><span class="nv">q</span><span class="p">)</span>
+<span class="mi">1</span>
+</pre></div>
+</div>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">协议</a><ul>
+<li><a class="reference internal" href="#id2">实现协议</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="record.html"
+                        title="previous chapter">记录</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="concurrency-and-parallelism.html"
+                        title="next chapter">并发与并行</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

@@ -1,0 +1,281 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>第 10 章：信号 &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="up" title="《UNIX 环境高级编程》笔记" href="index.html" />
+    <link rel="next" title="第 11 章：线程" href="chp11.html" />
+    <link rel="prev" title="第 8 章：进程控制" href="chp8.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="chp11.html" title="第 11 章：线程"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="chp8.html" title="第 8 章：进程控制"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">《UNIX 环境高级编程》笔记</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>第 10 章：信号<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<p>信号是软件中断，它提供了一种处理异步事件的手段。</p>
+<div class="section" id="id2">
+<h2>信号的定义<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>每个信号都以一个 <code class="docutils literal"><span class="pre">SIG</span></code> 开头的命令定义，定义位于头文件 <code class="docutils literal"><span class="pre">&lt;signal.h&gt;</span></code> 中。</p>
+<p>信号都被定义为正整数，不存在编号为 <code class="docutils literal"><span class="pre">0</span></code> 的信号，因为发送信号的 <code class="docutils literal"><span class="pre">kill</span></code> 函数对 <code class="docutils literal"><span class="pre">0</span></code> 有特殊的用途（用于检查进程是否存在）。</p>
+</div>
+<div class="section" id="id3">
+<h2>产生信号<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<p>有很多条件可以产生信号：</p>
+<ul class="simple">
+<li>用户通过按键，引发终端产生信号：比如 CTRL+C 可以产生中断信号 <code class="docutils literal"><span class="pre">SIGINT</span></code> 。</li>
+<li>硬件异常产生信号：除零、无效的内存引用等等。这些异常由硬件检测，并通知内核，内核再为引发问题的进程产生适当的信号。</li>
+<li>进程调用 <code class="docutils literal"><span class="pre">kill(2)</span></code> 函数可将信号发送给另一个进程或进程组。</li>
+<li>用户用 <code class="docutils literal"><span class="pre">kill(1)</span></code>  命令将信号发送给其他进程。</li>
+<li>当检测到某种软件条件已经发生，也会产生信号来通知进行。</li>
+</ul>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">这里使用的 <code class="docutils literal"><span class="pre">kill</span></code> 是带有歧义的，它的意思是“向进程发送指定信号”，而不是“杀死某个程序”。</p>
+</div>
+</div>
+<div class="section" id="id4">
+<h2>信号处理<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h2>
+<p>信号是异步事件的一个典型示例，
+不能通过检测某个变量来判断是否出现了一个信号，
+而是必须告诉内核，
+“当XX信号发生时，请执行以下动作”。</p>
+<p>处理信号有以下三种方法：</p>
+<ul class="simple">
+<li>忽略此信号，不执行任何动作。除了用于终结进程的 <code class="docutils literal"><span class="pre">SIGKILL</span></code> 和 <code class="docutils literal"><span class="pre">SIGSTOP</span></code> 之外，大部分信号都可以被忽略。</li>
+<li>捕捉信号。通知内核，在指定信号发生时，执行一个指定的函数，这个函数称为该信号的信号处理器（handler）。</li>
+<li>执行系统默认动作。最常见的默认动作是终结接收到信号的进程。</li>
+</ul>
+</div>
+<div class="section" id="id5">
+<h2>信号处理器<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h2>
+<p>使用 <code class="docutils literal"><span class="pre">signal</span></code> 函数，可以为指定信号管理一个信号处理器：当进程接到给定信号时，它就会执行所指定的信号处理器。</p>
+<p><code class="docutils literal"><span class="pre">signal</span></code> 函数的签名定义如下：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#include &lt;signal.h&gt;</span>
+
+<span class="k">typedef</span> <span class="nf">void</span> <span class="p">(</span><span class="o">*</span><span class="kt">sighandler_t</span><span class="p">)(</span><span class="kt">int</span><span class="p">);</span>
+
+<span class="kt">sighandler_t</span> <span class="nf">signal</span><span class="p">(</span><span class="kt">int</span> <span class="n">signum</span><span class="p">,</span> <span class="kt">sighandler_t</span> <span class="n">handler</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>其中参数 <code class="docutils literal"><span class="pre">signum</span></code> 指定要处理的信号；
+<code class="docutils literal"><span class="pre">handler</span></code> 参数指定处理信号的函数，
+这个函数接受一个整数值，但不返回任何值。</p>
+<p>如果处理器设置成功， <code class="docutils literal"><span class="pre">signal</span></code> 函数的返回值是之前为这个信号所设置的信号处理器。如果设置失败，则返回 <code class="docutils literal"><span class="pre">SIG_ERR</span></code> 。</p>
+<p><code class="docutils literal"><span class="pre">handler</span></code> 可以是 <code class="docutils literal"><span class="pre">SIG_IGN</span></code> 或者 <code class="docutils literal"><span class="pre">SIG_DFL</span></code> ，前者表示忽略信号，后者表示执行信号的默认动作。</p>
+<p>以下程序执行一个无限循环，直到接受到指定信号才退出：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// 10-signal.c</span>
+
+<span class="cp">#include &lt;signal.h&gt;</span>
+<span class="cp">#include &lt;stdio.h&gt;</span>
+<span class="cp">#include &lt;stdlib.h&gt;</span>
+
+<span class="kt">void</span> <span class="nf">sig_usr</span><span class="p">(</span><span class="kt">int</span><span class="p">);</span>
+
+<span class="kt">int</span>
+<span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">signal</span><span class="p">(</span><span class="n">SIGUSR1</span><span class="p">,</span> <span class="n">sig_usr</span><span class="p">)</span> <span class="o">==</span> <span class="n">SIG_ERR</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;set SIGUSR1 handler fail</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">for</span> <span class="p">(</span> <span class="p">;</span> <span class="p">;</span> <span class="p">)</span>
+        <span class="n">pause</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> 
+<span class="nf">sig_usr</span><span class="p">(</span><span class="kt">int</span> <span class="n">signo</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;receive signal %d </span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">SIGUSR1</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;bye bye ~</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+    <span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>我们在后台运行这个程序，并调用 <code class="docutils literal"><span class="pre">kill</span></code> 命令向它发送指定的信号：</p>
+<div class="highlight-c"><div class="highlight"><pre>$ ./10-signal.out &amp;
+[1] 4016
+
+$ kill -USR1 4016
+receive signal 10
+bye bye ~
+</pre></div>
+</div>
+<div class="admonition tip">
+<p class="first admonition-title">Tip</p>
+<p class="last"><code class="docutils literal"><span class="pre">signal</span></code> 函数的语义和实现有关，最好使用 <code class="docutils literal"><span class="pre">sigaction</span></code> 函数代替 <code class="docutils literal"><span class="pre">signal</span></code> 函数。</p>
+</div>
+</div>
+<div class="section" id="id6">
+<h2>信号与阻塞调用<a class="headerlink" href="#id6" title="Permalink to this headline">¶</a></h2>
+<p>如果在进程执行一个阻塞调用的过程中，
+系统捕捉到一个信号，
+那么这个调用就会被中断，
+不再执行，
+该系统调用返回出错，
+并将 <code class="docutils literal"><span class="pre">errno</span></code> 设为 <code class="docutils literal"><span class="pre">EINTR</span></code> 。</p>
+<p>以下代码展示了一个可能被中断的读操作如何重新启动：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="nl">again</span><span class="p">:</span>
+    <span class="k">if</span> <span class="p">((</span><span class="n">n</span> <span class="o">=</span> <span class="n">read</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">BUFFSIZE</span><span class="p">))</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">errno</span> <span class="o">=</span> <span class="n">EINTR</span><span class="p">)</span>
+            <span class="k">goto</span> <span class="n">again</span><span class="p">;</span>
+        <span class="k">else</span>
+            <span class="c1">// handle error</span>
+    <span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id7">
+<h2>发送信号<a class="headerlink" href="#id7" title="Permalink to this headline">¶</a></h2>
+<p>有几个函数可以用于发送和等待信号。</p>
+<p><code class="docutils literal"><span class="pre">kill</span></code> 和终端的 <code class="docutils literal"><span class="pre">kill</span></code> 命令类似，它可以将一个指定的信号发送给指定的进程或者进程组（实际上， <code class="docutils literal"><span class="pre">kill</span></code> 命令就由 <code class="docutils literal"><span class="pre">kill</span></code> 函数定义），它的函数签名定义如下：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#include &lt;sys/types.h&gt;</span>
+<span class="cp">#include &lt;signal.h&gt;</span>
+
+<span class="kt">int</span> <span class="nf">kill</span><span class="p">(</span><span class="kt">pid_t</span> <span class="n">pid</span><span class="p">,</span> <span class="kt">int</span> <span class="n">sig</span><span class="p">);</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">raise</span></code> 可以向调用进程自身发送一个信号：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#include &lt;signal.h&gt;</span>
+
+<span class="kt">int</span> <span class="nf">raise</span><span class="p">(</span><span class="kt">int</span> <span class="n">sig</span><span class="p">);</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">alarm</span></code> 可以在规定的时间之后，向调用进程自身发送一个 <code class="docutils literal"><span class="pre">SIGALRM</span></code> 信号：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#include &lt;unistd.h&gt;</span>
+
+<span class="kt">unsigned</span> <span class="kt">int</span> <span class="nf">alarm</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">seconds</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>因为 <code class="docutils literal"><span class="pre">SIGALRM</span></code> 的默认操作是终止进程，因此，要有效地利用 <code class="docutils literal"><span class="pre">alarm</span></code> ，通常需要为 <code class="docutils literal"><span class="pre">SIGALRM</span></code> 信号设置一个信号处理程序。</p>
+<p><code class="docutils literal"><span class="pre">pause</span></code> 函数挂起调用进程，直到捕捉到一个信号为止：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#include &lt;unistd.h&gt;</span>
+
+<span class="kt">int</span> <span class="nf">pause</span><span class="p">(</span><span class="kt">void</span><span class="p">);</span>
+</pre></div>
+</div>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">第 10 章：信号</a><ul>
+<li><a class="reference internal" href="#id2">信号的定义</a></li>
+<li><a class="reference internal" href="#id3">产生信号</a></li>
+<li><a class="reference internal" href="#id4">信号处理</a></li>
+<li><a class="reference internal" href="#id5">信号处理器</a></li>
+<li><a class="reference internal" href="#id6">信号与阻塞调用</a></li>
+<li><a class="reference internal" href="#id7">发送信号</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="chp8.html"
+                        title="previous chapter">第 8 章：进程控制</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="chp11.html"
+                        title="next chapter">第 11 章：线程</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

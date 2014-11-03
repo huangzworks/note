@@ -1,0 +1,237 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>压缩列表 &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="up" title="重用 Redis 模块" href="index.html" />
+    <link rel="next" title="MariaDB" href="../mariadb/index.html" />
+    <link rel="prev" title="整数集合" href="intset.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../mariadb/index.html" title="MariaDB"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="intset.html" title="整数集合"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">重用 Redis 模块</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>压缩列表<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="id2">
+<h2>适用范围<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>压缩列表(ziplist)是一系列特殊编码的内存块，
+它可以用节约内存的方式保存一系列字符串和整数值，
+具体的信息请参考 <a class="reference external" href="http://www.redisbook.com">《Redis 设计与实现》</a> 的相关章节。</p>
+</div>
+<div class="section" id="id3">
+<h2>准备工作<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<ol class="arabic simple">
+<li>将以下文件复制到目标文件夹：<ul>
+<li><code class="docutils literal"><span class="pre">endianconv.c</span></code></li>
+<li><code class="docutils literal"><span class="pre">endianconv.h</span></code></li>
+<li><code class="docutils literal"><span class="pre">fmacros.h</span></code></li>
+<li><code class="docutils literal"><span class="pre">util.c</span></code></li>
+<li><code class="docutils literal"><span class="pre">util.h</span></code></li>
+<li><code class="docutils literal"><span class="pre">ziplist.c</span></code></li>
+<li><code class="docutils literal"><span class="pre">ziplist.h</span></code></li>
+<li><code class="docutils literal"><span class="pre">zmalloc.c</span></code></li>
+<li><code class="docutils literal"><span class="pre">zmalloc.h</span></code></li>
+</ul>
+</li>
+<li>编辑 <code class="docutils literal"><span class="pre">zmallo.c</span></code> ，将其中的 <code class="docutils literal"><span class="pre">#include</span> <span class="pre">&quot;config.h&quot;</span></code> 语句删去。</li>
+</ol>
+</div>
+<div class="section" id="id4">
+<h2>测试驱动程序<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h2>
+<p>以下程序对 <code class="docutils literal"><span class="pre">ziplist</span></code> 模块进行了测试，
+包括创建并释放一个空白的 <code class="docutils literal"><span class="pre">ziplist</span></code> ，
+以及对 <code class="docutils literal"><span class="pre">ziplist</span></code> 进行添加、删除和查找操作：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// main.c</span>
+
+<span class="cp">#include &lt;assert.h&gt; </span><span class="c1">// load assert()</span>
+<span class="cp">#include &lt;stdlib.h&gt; </span><span class="c1">// load NULL</span>
+
+<span class="cp">#include &quot;ziplist.h&quot;</span>
+
+<span class="kt">void</span> <span class="nf">test_create_and_destroy_ziplist</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="kt">unsigned</span> <span class="kt">char</span> <span class="o">*</span><span class="n">zl</span> <span class="o">=</span> <span class="n">ziplistNew</span><span class="p">();</span>
+
+    <span class="n">assert</span><span class="p">(</span>
+        <span class="n">zl</span> <span class="o">!=</span> <span class="nb">NULL</span>
+    <span class="p">);</span>
+
+    <span class="n">zfree</span><span class="p">(</span><span class="n">zl</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="nf">test_add_delete_and_find_node_wtih_ziplist</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="kt">unsigned</span> <span class="kt">char</span> <span class="o">*</span><span class="n">zl</span> <span class="o">=</span> <span class="n">ziplistNew</span><span class="p">();</span>
+
+    <span class="c1">// add first node</span>
+    <span class="n">zl</span> <span class="o">=</span> <span class="n">ziplistPush</span><span class="p">(</span><span class="n">zl</span><span class="p">,</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="kt">char</span><span class="o">*</span><span class="p">)</span><span class="s">&quot;hello&quot;</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="n">ZIPLIST_TAIL</span><span class="p">);</span>
+
+    <span class="n">assert</span><span class="p">(</span>
+        <span class="n">ziplistLen</span><span class="p">(</span><span class="n">zl</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+    <span class="p">);</span>
+
+    <span class="n">assert</span><span class="p">(</span>
+        <span class="n">ziplistFind</span><span class="p">(</span><span class="n">zl</span><span class="p">,</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="kt">char</span><span class="o">*</span><span class="p">)</span><span class="s">&quot;hello&quot;</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">NULL</span><span class="p">)</span>
+    <span class="p">;</span>
+
+    <span class="c1">// add second node</span>
+    <span class="n">zl</span> <span class="o">=</span> <span class="n">ziplistPush</span><span class="p">(</span><span class="n">zl</span><span class="p">,</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="kt">char</span><span class="o">*</span><span class="p">)</span><span class="s">&quot;moto&quot;</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="n">ZIPLIST_TAIL</span><span class="p">);</span>
+
+    <span class="n">assert</span><span class="p">(</span>
+        <span class="n">ziplistLen</span><span class="p">(</span><span class="n">zl</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span>
+    <span class="p">);</span>
+
+    <span class="n">assert</span><span class="p">(</span>
+        <span class="n">ziplistFind</span><span class="p">(</span><span class="n">zl</span><span class="p">,</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="kt">char</span><span class="o">*</span><span class="p">)</span><span class="s">&quot;moto&quot;</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">NULL</span><span class="p">);</span>
+
+    <span class="c1">// delete first node</span>
+    <span class="kt">unsigned</span> <span class="kt">char</span><span class="o">*</span> <span class="n">node_p</span> <span class="o">=</span> <span class="n">ziplistFind</span><span class="p">(</span><span class="n">zl</span><span class="p">,</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="kt">char</span><span class="o">*</span><span class="p">)</span><span class="s">&quot;hello&quot;</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="n">zl</span> <span class="o">=</span> <span class="n">ziplistDelete</span><span class="p">(</span><span class="n">zl</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">node_p</span><span class="p">);</span>
+
+    <span class="n">assert</span><span class="p">(</span>
+        <span class="n">ziplistFind</span><span class="p">(</span><span class="n">zl</span><span class="p">,</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="kt">char</span><span class="o">*</span><span class="p">)</span><span class="s">&quot;hello&quot;</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">==</span> <span class="nb">NULL</span>
+    <span class="p">);</span>
+
+    <span class="n">assert</span><span class="p">(</span>
+        <span class="n">ziplistLen</span><span class="p">(</span><span class="n">zl</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+    <span class="p">);</span>
+
+    <span class="c1">// release memory</span>
+    <span class="n">zfree</span><span class="p">(</span><span class="n">zl</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">test_create_and_destroy_ziplist</span><span class="p">();</span>
+
+    <span class="n">test_add_delete_and_find_node_wtih_ziplist</span><span class="p">();</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id5">
+<h2>完整源码<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h2>
+<p>完整的测试代码可以在 <a class="reference external" href="https://github.com/huangz1990/blog/tree/master/storage/reuse-redis-module/code">这里</a> 的 <code class="docutils literal"><span class="pre">ziplist</span></code> 文件夹找到。</p>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">压缩列表</a><ul>
+<li><a class="reference internal" href="#id2">适用范围</a></li>
+<li><a class="reference internal" href="#id3">准备工作</a></li>
+<li><a class="reference internal" href="#id4">测试驱动程序</a></li>
+<li><a class="reference internal" href="#id5">完整源码</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="intset.html"
+                        title="previous chapter">整数集合</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="../mariadb/index.html"
+                        title="next chapter">MariaDB</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

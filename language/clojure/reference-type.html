@@ -1,0 +1,213 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>引用类型 &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="up" title="Clojure" href="index.html" />
+    <link rel="next" title="杂项" href="misc.html" />
+    <link rel="prev" title="并发与并行" href="concurrency-and-parallelism.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="misc.html" title="杂项"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="concurrency-and-parallelism.html" title="并发与并行"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Clojure</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>引用类型<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="id2">
+<h2>通用设施<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>所有引用类型都支持 watch 和 validator 两种机制，以下是对这两种机制的介绍。</p>
+<div class="section" id="watch">
+<h3>watch<a class="headerlink" href="#watch" title="Permalink to this headline">¶</a></h3>
+<p>Watch 监视给定的引用类型，并在引用类型的值改变时，执行给定的函数。</p>
+<p><code class="docutils literal"><span class="pre">add-watch</span></code> 负责关联 watch 函数和引用类型，每个传给 <code class="docutils literal"><span class="pre">add-watch</span></code> 的函数都接受四个参数：</p>
+<ol class="arabic simple">
+<li><code class="docutils literal"><span class="pre">key</span></code> ：因为一个引用类型可以关联多个 watch 函数，所以需要使用一个 <code class="docutils literal"><span class="pre">key</span></code> 来标识各个不同的 watch</li>
+<li><code class="docutils literal"><span class="pre">ref</span></code> ：发生改变的引用类型本身</li>
+<li><code class="docutils literal"><span class="pre">old-state</span></code> ：引用类型的旧值</li>
+<li><code class="docutils literal"><span class="pre">new-state</span></code> ：引用类型的新值</li>
+</ol>
+<p>而 <code class="docutils literal"><span class="pre">add-watch</span></code> 本身接受三个函数：</p>
+<ol class="arabic simple">
+<li>被关联的引用类型</li>
+<li>watch 函数的 key</li>
+<li>watch 函数</li>
+</ol>
+<div class="highlight-clojure"><div class="highlight"><pre>user=&gt; (defn show-change [key ref old-state new-state]
+         (println &quot;Watcher Key &quot; key)
+         (println &quot;Watcher Ref &quot; ref)
+         (println &quot;Watcher Old State &quot; old-state)
+         (println &quot;Watcher New State &quot; new-state))
+#&#39;user/show-change
+
+user=&gt; (def a (atom {}))
+#&#39;user/a
+
+user=&gt; (add-watch a :show-info-when-value-change show-change)
+#&lt;Atom@96d02d: {}&gt;
+
+user=&gt; (swap! a assoc :key &quot;value&quot;)
+Watcher Key  :show-info-when-value-change
+Watcher Ref  #&lt;Atom@96d02d: {:key value}&gt;
+Watcher Old State  {}
+Watcher New State  {:key value}
+{:key &quot;value&quot;}
+</pre></div>
+</div>
+<p>一个引用类型可以关注多个 watch 函数，它们在引用类型的值被改变时同步地运行（执行的顺序不明，API文档没提到）：</p>
+<div class="highlight-clojure"><div class="highlight"><pre>user=&gt; (def a (atom {}))
+#&#39;user/a
+
+user=&gt; (add-watch a :first-watcher (fn [key ref old new] (println &quot;first watcher call&quot;)))
+#&lt;Atom@1ba5790: {}&gt;
+
+user=&gt; (add-watch a :second-watcher (fn [key ref old new] (println &quot;second watcher call&quot;)))
+#&lt;Atom@1ba5790: {}&gt;
+
+user=&gt; (swap! a assoc :key &quot;value&quot;)
+second watcher call
+first watcher call
+{:key &quot;value&quot;}
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">remove-watch</span></code> 函数用于移除关联的 watch 。</p>
+<p>传给 <code class="docutils literal"><span class="pre">remove-watch</span></code> 的 <code class="docutils literal"><span class="pre">key</span></code> 参数需要和 <code class="docutils literal"><span class="pre">add-watch</span></code> 调用时指定的 <code class="docutils literal"><span class="pre">key</span></code> 一致：</p>
+<div class="highlight-clojure"><div class="highlight"><pre>user=&gt; (def a (atom {}))
+#&#39;user/a
+
+user=&gt; (add-watch a :watcher (fn [key ref old new] (println &quot;watcher call&quot;)))
+#&lt;Atom@11008e: {}&gt;
+
+user=&gt; (swap! a assoc :key &quot;value&quot;)
+watcher call
+{:key &quot;value&quot;}
+
+user=&gt; (remove-watch a :watcher)
+#&lt;Atom@11008e: {:key &quot;value&quot;}&gt;
+
+user=&gt; (reset! a {})
+{}
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">引用类型</a><ul>
+<li><a class="reference internal" href="#id2">通用设施</a><ul>
+<li><a class="reference internal" href="#watch">watch</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="concurrency-and-parallelism.html"
+                        title="previous chapter">并发与并行</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="misc.html"
+                        title="next chapter">杂项</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

@@ -1,0 +1,210 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>杂项 &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="up" title="Clojure" href="index.html" />
+    <link rel="next" title="MRuby 源码分析" href="../mruby-code-analysis/index.html" />
+    <link rel="prev" title="引用类型" href="reference-type.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../mruby-code-analysis/index.html" title="MRuby 源码分析"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="reference-type.html" title="引用类型"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Clojure</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>杂项<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="id2">
+<h2>文件载入<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>对一些小程序进行原型测试的时候，通常要在 REPL 中进行一些重复的输入，一个更好的办法是将程序保存进某个文件，然后在 REPL 中通过载入文件来避免重复输入。</p>
+<p><code class="docutils literal"><span class="pre">load-file</span></code> 函数读入并求值指定文件。</p>
+<p>假如现在有文件 <code class="docutils literal"><span class="pre">greet.clj</span></code> ，内容如下：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="c1">;;; greet.clj</span>
+
+<span class="p">(</span><span class="kd">defn </span><span class="nv">greeting</span> <span class="p">[]</span>
+    <span class="p">(</span><span class="nb">str </span><span class="s">&quot;hello&quot;</span><span class="p">))</span>
+
+<span class="p">(</span><span class="nf">greeting</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>之后可以使用 <code class="docutils literal"><span class="pre">load-file</span></code> 对它进行读入和求值：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">load-file </span><span class="s">&quot;greet.clj&quot;</span><span class="p">)</span>
+<span class="s">&quot;hello&quot;</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id3">
+<h2>延迟求值<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<p>Clojure 提供了一组原语，用于实现延迟求值。</p>
+<p><code class="docutils literal"><span class="pre">delay</span></code> 延缓对一个表达式的求值，直到对它调用 <code class="docutils literal"><span class="pre">force</span></code> 为止:</p>
+<div class="highlight-clojure"><div class="highlight"><pre>user=&gt; (def d (delay (+ 1 1)))
+#&#39;user/d
+
+user=&gt; d
+#&lt;Delay@14fa3ef: :pending&gt;
+
+user=&gt; (class d)
+clojure.lang.Delay
+
+user=&gt; (force d)
+2
+
+user=&gt; d
+#&lt;Delay@14fa3ef: 2&gt;
+
+user=&gt; (class d)
+clojure.lang.Delay
+</pre></div>
+</div>
+</div>
+<div class="section" id="id4">
+<h2>异常的捕捉与处理<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h2>
+<p>Clojure 的异常捕捉和处理沿用了 JAVA 的 <code class="docutils literal"><span class="pre">try/catch/finally</span></code> 套路，只是外观上略有不同，它的格式为：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="p">(</span><span class="nf">try</span>
+    <span class="nv">main-expr</span>
+    <span class="p">(</span><span class="nf">catch</span> <span class="nv">exception-class</span> <span class="nv">exception-instance</span> <span class="nv">catch-expr*</span><span class="p">)</span>
+    <span class="p">(</span><span class="nf">finally</span> <span class="nv">finally-expr*</span><span class="p">)</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>如果在 <code class="docutils literal"><span class="pre">main-expr</span></code> 执行的过程中，没有异常发生，那么返回 <code class="docutils literal"><span class="pre">main-expr</span></code> 的求值结果作为整个 <code class="docutils literal"><span class="pre">try</span></code> 表达式的值。</p>
+<p>反之，如果有异常产生，那么程序就会将这个异常和所提供的 <code class="docutils literal"><span class="pre">catch</span></code> 语句进行匹配，看所抛出异常的类型是否为 <code class="docutils literal"><span class="pre">exception-class</span></code> 。</p>
+<p>如果找到一个匹配正确的 <code class="docutils literal"><span class="pre">catch</span></code> 语句的话，那么就将这个异常实例和局部变量 <code class="docutils literal"><span class="pre">exception-instance</span></code> 绑定，这个局部变量可以在 <code class="docutils literal"><span class="pre">catch-expr*</span></code> 内使用。</p>
+<p>当有异常发生时，被匹配 <code class="docutils literal"><span class="pre">catch</span></code> 语句的 <code class="docutils literal"><span class="pre">catch-expr*</span></code> 表达式的值就是整个 <code class="docutils literal"><span class="pre">try</span></code> 语句的返回值；如果没有提供 <code class="docutils literal"><span class="pre">catch-expr*</span></code> ，那么返回 <code class="docutils literal"><span class="pre">nil</span></code> 。</p>
+<p><code class="docutils literal"><span class="pre">catch</span></code> 语句可以有多个，它们按从先到后的顺序被一个个匹配，如果所有语句都匹配不成功，那么程序向外部传递异常。</p>
+<p><code class="docutils literal"><span class="pre">finally</span></code> 是可选的，最多只能有一个 <code class="docutils literal"><span class="pre">finally</span></code> 语句：它包围一些表达式，用它们的副作用来执行抛出异常之后要完成的动作，比如关闭数据库，等等。</p>
+<p>举个例子，以下代码试图使用 <code class="docutils literal"><span class="pre">Integer.</span></code> 来将 <code class="docutils literal"><span class="pre">&quot;not</span> <span class="pre">a</span> <span class="pre">integer&quot;</span></code> 转换为整数，但这个字符串并不是合法的输入，于是引发异常：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">Integer.</span> <span class="s">&quot;not a integer&quot;</span><span class="p">)</span>
+<span class="c1">; NumberFormatException For input string: &quot;not a integer&quot;</span>
+<span class="c1">; java.lang.NumberFormatException.forInputString (NumberFormatException.java:65)</span>
+</pre></div>
+</div>
+<p>以下代码会捕捉异常，并打印出一个字符串格式的异常信息：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span>
+<span class="p">(</span><span class="nf">try</span>
+    <span class="p">(</span><span class="nf">Integer.</span> <span class="s">&quot;not a integer&quot;</span><span class="p">)</span>
+    <span class="p">(</span><span class="nf">catch</span> <span class="nv">java.lang.NumberFormatException</span> <span class="nv">err</span> <span class="p">(</span><span class="nb">str </span><span class="nv">err</span><span class="p">))</span>
+<span class="p">)</span>
+<span class="s">&quot;java.lang.NumberFormatException: For input string: \&quot;not a integer\&quot;&quot;</span>
+</pre></div>
+</div>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">杂项</a><ul>
+<li><a class="reference internal" href="#id2">文件载入</a></li>
+<li><a class="reference internal" href="#id3">延迟求值</a></li>
+<li><a class="reference internal" href="#id4">异常的捕捉与处理</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="reference-type.html"
+                        title="previous chapter">引用类型</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="../mruby-code-analysis/index.html"
+                        title="next chapter">MRuby 源码分析</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

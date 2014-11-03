@@ -1,0 +1,216 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>记录 &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="up" title="Clojure" href="index.html" />
+    <link rel="next" title="协议" href="protocol.html" />
+    <link rel="prev" title="多态方法" href="multimethod.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="protocol.html" title="协议"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="multimethod.html" title="多态方法"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Clojure</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>记录<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="id2">
+<h2>类型的必要性<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>在 Clojure 中，通常用 Map 来表示键-值对的数据，比如说，以下 Map 可以用于表示一条 tweet 信息：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="k">def </span><span class="nv">t</span> <span class="p">{</span><span class="ss">:user</span> <span class="s">&quot;huangz&quot;</span> <span class="ss">:content</span> <span class="s">&quot;hello world&quot;</span><span class="p">})</span>
+<span class="o">#</span><span class="ss">&#39;user/t</span>
+</pre></div>
+</div>
+<p>在概念上，这个 Map 可以表示一条 tweet ，但是，从技术上来看，它只是一个 Map 而已：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">type</span> <span class="nv">t</span><span class="p">)</span>
+<span class="nv">clojure.lang.PersistentHashMap</span>
+</pre></div>
+</div>
+<p>在大多数时候，用 Map 来表示数据已经足够了，但是，在一些情况下，可能需要为一些数据创建新的类型，让它和其他结构相同的数据区别开来。</p>
+<p>比如说，以下两个 Map 分别表示一个人和一只猫，但是，因为它们共享同样的结构，所以很容易会让人误以为是同类型的数据：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="k">def </span><span class="nv">a-man</span> <span class="p">{</span><span class="ss">:name</span> <span class="s">&quot;peter&quot;</span> <span class="ss">:age</span> <span class="mi">25</span><span class="p">})</span>
+<span class="o">#</span><span class="ss">&#39;user/a-man</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="k">def </span><span class="nv">a-cat</span> <span class="p">{</span><span class="ss">:name</span> <span class="s">&quot;mimi&quot;</span> <span class="ss">:age</span> <span class="mi">5</span><span class="p">})</span>
+<span class="o">#</span><span class="ss">&#39;user/a-cat</span>
+</pre></div>
+</div>
+<p>在这种情况下，为了避免混淆，就需要创建新的类型来表示特定的数据了。</p>
+</div>
+<div class="section" id="id3">
+<h2>记录的创建和使用<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<p>Clojure 中的记录（record）可以用于创建带类型的键-值对数据结构，它的定义形式如下：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="p">(</span><span class="kd">defrecord </span><span class="nv">RecordName</span> <span class="p">[</span><span class="nv">key1</span> <span class="nv">key2</span> <span class="nv">...</span><span class="p">])</span>
+</pre></div>
+</div>
+<p>为了和函数名和宏名区别开来，记录的名字通常以大驼峰的形式给出。</p>
+<p>继续前面的例子，对于人和猫，可以给出定义以下记录：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="p">(</span><span class="kd">defrecord </span><span class="nv">Man</span> <span class="p">[</span><span class="nb">name </span><span class="nv">age</span><span class="p">])</span>
+
+<span class="p">(</span><span class="kd">defrecord </span><span class="nv">Cat</span> <span class="p">[</span><span class="nb">name </span><span class="nv">age</span><span class="p">])</span>
+</pre></div>
+</div>
+<p>定义记录之后，可以用 <code class="docutils literal"><span class="pre">-&gt;RecordName</span></code> 的形式创建相应记录的实例：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="k">def </span><span class="nv">a-real-man</span> <span class="p">(</span><span class="nf">-&gt;Man</span> <span class="s">&quot;peter&quot;</span> <span class="mi">25</span><span class="p">))</span>
+<span class="o">#</span><span class="ss">&#39;user/a-real-man</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="k">def </span><span class="nv">a-real-cat</span> <span class="p">(</span><span class="nf">-&gt;Cat</span> <span class="s">&quot;mimi&quot;</span> <span class="mi">5</span><span class="p">))</span>
+<span class="o">#</span><span class="ss">&#39;user/a-real-cat</span>
+
+<span class="nv">user=&gt;</span> <span class="nv">a-real-man</span>
+<span class="o">#</span><span class="nv">user.Man</span><span class="p">{</span><span class="ss">:name</span> <span class="s">&quot;peter&quot;</span>, <span class="ss">:age</span> <span class="mi">25</span><span class="p">}</span>
+
+<span class="nv">user=&gt;</span> <span class="nv">a-real-cat</span>
+<span class="o">#</span><span class="nv">user.Cat</span><span class="p">{</span><span class="ss">:name</span> <span class="s">&quot;mimi&quot;</span>, <span class="ss">:age</span> <span class="mi">5</span><span class="p">}</span>
+</pre></div>
+</div>
+<p>可以用 <code class="docutils literal"><span class="pre">(:field</span> <span class="pre">record)</span></code> 的形式取出记录的域：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="ss">:name</span> <span class="nv">a-real-man</span><span class="p">)</span>
+<span class="s">&quot;peter&quot;</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="ss">:age</span> <span class="nv">a-real-man</span><span class="p">)</span>
+<span class="mi">25</span>
+</pre></div>
+</div>
+<div class="admonition warning">
+<p class="first admonition-title">Warning</p>
+<p>Map 可以用 <code class="docutils literal"><span class="pre">(:field</span> <span class="pre">map)</span></code> 和 <code class="docutils literal"><span class="pre">(map</span> <span class="pre">:field)</span></code> 两种方式来取出域。</p>
+<p>而记录的域只能用 <code class="docutils literal"><span class="pre">(:field</span> <span class="pre">record)</span></code> 的形式来取出。</p>
+<p>以下是一个错误的例子：</p>
+<div class="last highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">a-real-man</span> <span class="ss">:name</span><span class="p">)</span>
+<span class="nv">ClassCastException</span> <span class="nv">user.man</span> <span class="nv">cannot</span> <span class="nv">be</span> <span class="nb">cast </span><span class="nv">to</span> <span class="nv">clojure.lang.IFn</span>  <span class="nv">user/eval47</span> <span class="p">(</span><span class="nf">NO_SOURCE_FILE</span><span class="ss">:13</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>和前面 Map 表示的例子一样， <code class="docutils literal"><span class="pre">Man</span></code> 和 <code class="docutils literal"><span class="pre">Cat</span></code> 两个记录含有同样的两个域： <code class="docutils literal"><span class="pre">name</span></code> 和 <code class="docutils literal"><span class="pre">age</span></code> 。</p>
+<p>但是，记录和用 Map 表示的数据不一样，它拥有自己的类型：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">type</span> <span class="nv">a-real-man</span><span class="p">)</span>
+<span class="nv">user.Man</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">type</span> <span class="nv">a-real-cat</span><span class="p">)</span>
+<span class="nv">user.Cat</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">= </span><span class="p">(</span><span class="nf">type</span> <span class="nv">a-real-man</span><span class="p">)</span> <span class="p">(</span><span class="nf">type</span> <span class="nv">a-real-cat</span><span class="p">))</span>
+<span class="nv">false</span>
+</pre></div>
+</div>
+<p>这样就不会再混淆人和猫的数据了。</p>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">记录</a><ul>
+<li><a class="reference internal" href="#id2">类型的必要性</a></li>
+<li><a class="reference internal" href="#id3">记录的创建和使用</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="multimethod.html"
+                        title="previous chapter">多态方法</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="protocol.html"
+                        title="next chapter">协议</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

@@ -1,0 +1,293 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>SDS 结构 &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="up" title="Redis 源码分析" href="index.html" />
+    <link rel="next" title="Lua 脚本" href="lua-scripting.html" />
+    <link rel="prev" title="字典" href="dict.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="lua-scripting.html" title="Lua 脚本"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="dict.html" title="字典"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Redis 源码分析</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="sds">
+<h1>SDS 结构<a class="headerlink" href="#sds" title="Permalink to this headline">¶</a></h1>
+<p>Sds （Simple Dynamic Strings）是 Redis 中最基本的底层数据结构，
+它既是 Redis 的 String 类型的底层实现，
+也是实现 Hash 、 List 和 Set 等复合类型的基石。</p>
+<p>除此之外，sds 还是 Redis 内部实现所使用的字符串类型，
+经过 <code class="docutils literal"><span class="pre">robj</span></code> 结构包装之后的 sds 被广泛用于 Redis 自身的构建当中：
+比如用作 KEY 、作为函数参数、保存 Redis 命令和用作命令的回复（reply），等等。</p>
+<p>本文通过分析源码文件 <code class="docutils literal"><span class="pre">sds.c</span></code> 和 <code class="docutils literal"><span class="pre">sds.h</span></code> ，了解 sds 数据结构的实现，籍此加深对 Redis 的理解。</p>
+<div class="section" id="id1">
+<h2>数据类型定义<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h2>
+<p>与 sds 实现有关的数据类型有两个，一个是 <code class="docutils literal"><span class="pre">sds</span></code> ：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// 字符串类型的别名</span>
+<span class="k">typedef</span> <span class="kt">char</span> <span class="o">*</span><span class="n">sds</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>另一个是 <code class="docutils literal"><span class="pre">sdshdr</span></code> ：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// 持有 sds 的结构</span>
+<span class="k">struct</span> <span class="n">sdshdr</span> <span class="p">{</span>
+    <span class="c1">// buf 中已被使用的字符串空间数量</span>
+    <span class="kt">int</span> <span class="n">len</span><span class="p">;</span>
+    <span class="c1">// buf 中预留字符串空间数量</span>
+    <span class="kt">int</span> <span class="n">free</span><span class="p">;</span>
+    <span class="c1">// 实际储存字符串的地方</span>
+    <span class="kt">char</span> <span class="n">buf</span><span class="p">[];</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p>其中， <code class="docutils literal"><span class="pre">sds</span></code> 只是字符数组类型 <code class="docutils literal"><span class="pre">char*</span></code> 的别名，
+而 <code class="docutils literal"><span class="pre">sdshdr</span></code> 则用于持有和保存 <code class="docutils literal"><span class="pre">sds</span></code> 的信息。</p>
+<p>比如 <code class="docutils literal"><span class="pre">sdshdr.len</span></code> 可以用于在 O(1) 复杂度下获取 <code class="docutils literal"><span class="pre">sdshdr.buf</span></code> 中储存的字符串的实际长度，而 <code class="docutils literal"><span class="pre">sdshdr.free</span></code> 则用于保存 <code class="docutils literal"><span class="pre">sdshdr.buf</span></code> 中还有多少预留空间。</p>
+<p>（虽然文档和源码中都没有说明，但 <code class="docutils literal"><span class="pre">sdshdr</span></code> 应该是 sds handler 的缩写。）</p>
+</div>
+<div class="section" id="sdshdr-sds">
+<h2>将 sdshdr 用作 sds<a class="headerlink" href="#sdshdr-sds" title="Permalink to this headline">¶</a></h2>
+<p>Sds 模块对 <code class="docutils literal"><span class="pre">sdshdr</span></code> 结构使用了一点小技巧（trick）：通过指针运算，它使得 <code class="docutils literal"><span class="pre">sdshdr</span></code> 结构可以像 <code class="docutils literal"><span class="pre">sds</span></code> 类型一样被传值和处理，并在需要的时候恢复成 <code class="docutils literal"><span class="pre">sdshdr</span></code> 类型。</p>
+<p>理解这一小技巧的方法就是看以下一组函数的定义和它们的代码示例。</p>
+<p><code class="docutils literal"><span class="pre">sdsnewlen</span></code> 函数返回一个新的 <code class="docutils literal"><span class="pre">sds</span></code> 值，实际上，它创建的却是一个 <code class="docutils literal"><span class="pre">sdshdr</span></code> 结构：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// 根据给定初始化值和初始化长度</span>
+<span class="c1">// 创建或重分配一个 sds</span>
+<span class="n">sds</span> <span class="nf">sdsnewlen</span><span class="p">(</span><span class="k">const</span> <span class="kt">void</span> <span class="o">*</span><span class="n">init</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">initlen</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">struct</span> <span class="n">sdshdr</span> <span class="o">*</span><span class="n">sh</span><span class="p">;</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">init</span><span class="p">)</span> <span class="p">{</span>
+        <span class="c1">// 创建</span>
+        <span class="n">sh</span> <span class="o">=</span> <span class="n">zmalloc</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">sdshdr</span><span class="p">)</span><span class="o">+</span><span class="n">initlen</span><span class="o">+</span><span class="mi">1</span><span class="p">);</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="c1">// 重分配</span>
+        <span class="n">sh</span> <span class="o">=</span> <span class="n">zcalloc</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">sdshdr</span><span class="p">)</span><span class="o">+</span><span class="n">initlen</span><span class="o">+</span><span class="mi">1</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">sh</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span> <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+
+    <span class="n">sh</span><span class="o">-&gt;</span><span class="n">len</span> <span class="o">=</span> <span class="n">initlen</span><span class="p">;</span>
+    <span class="n">sh</span><span class="o">-&gt;</span><span class="n">free</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>   <span class="c1">// 刚开始时 free 为 0</span>
+
+    <span class="c1">// 设置字符串值</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">initlen</span> <span class="o">&amp;&amp;</span> <span class="n">init</span><span class="p">)</span>
+        <span class="n">memcpy</span><span class="p">(</span><span class="n">sh</span><span class="o">-&gt;</span><span class="n">buf</span><span class="p">,</span> <span class="n">init</span><span class="p">,</span> <span class="n">initlen</span><span class="p">);</span>
+    <span class="n">sh</span><span class="o">-&gt;</span><span class="n">buf</span><span class="p">[</span><span class="n">initlen</span><span class="p">]</span> <span class="o">=</span> <span class="sc">&#39;\0&#39;</span><span class="p">;</span>
+
+    <span class="c1">// 只返回 sh-&gt;buf 这个字符串部分</span>
+    <span class="k">return</span> <span class="p">(</span><span class="kt">char</span><span class="o">*</span><span class="p">)</span><span class="n">sh</span><span class="o">-&gt;</span><span class="n">buf</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>通过使用变量持有一个 <code class="docutils literal"><span class="pre">sds</span></code> 值，在遇到那些只处理 <code class="docutils literal"><span class="pre">sds</span></code> 值本身的函数时，可以直接将 <code class="docutils literal"><span class="pre">sds</span></code> 传给它们。比如说， <code class="docutils literal"><span class="pre">sdstoupper</span></code> 函数就是其中的一个例子：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">sds</span> <span class="n">s</span> <span class="o">=</span> <span class="n">sdsnewlen</span><span class="p">(</span><span class="s">&quot;hello moto&quot;</span><span class="p">,</span> <span class="mi">10</span><span class="p">);</span>
+<span class="n">sdstolower</span><span class="p">(</span><span class="n">s</span><span class="p">);</span>
+<span class="c1">// 现在 s 的值应该是 &quot;HELLO MOTO&quot;</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">sdstoupper</span></code> 函数将字符串内的字符全部转换为大写：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="kt">void</span> <span class="nf">sdstoupper</span><span class="p">(</span><span class="n">sds</span> <span class="n">s</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">int</span> <span class="n">len</span> <span class="o">=</span> <span class="n">sdslen</span><span class="p">(</span><span class="n">s</span><span class="p">),</span> <span class="n">j</span><span class="p">;</span>
+
+    <span class="k">for</span> <span class="p">(</span><span class="n">j</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">len</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span><span class="p">)</span> <span class="n">s</span><span class="p">[</span><span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="n">toupper</span><span class="p">(</span><span class="n">s</span><span class="p">[</span><span class="n">j</span><span class="p">]);</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>但是，有时候，我们不仅需要处理 <code class="docutils literal"><span class="pre">sds</span></code> 值本身 （也即是 <code class="docutils literal"><span class="pre">sdshdr.buf</span></code> 属性），还需要对 <code class="docutils literal"><span class="pre">sdshdr</span></code> 中其他属性，比如 <code class="docutils literal"><span class="pre">sdshdr.len</span></code> 和 <code class="docutils literal"><span class="pre">sdshdr.free</span></code> 进行处理。</p>
+<p>使用指针运算，可以从 <code class="docutils literal"><span class="pre">sds</span></code> 值中计算出相应的 <code class="docutils literal"><span class="pre">sdshdr</span></code> 结构：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// s 是一个 sds 值</span>
+<span class="k">struct</span> <span class="n">sdshdr</span> <span class="o">*</span><span class="n">sh</span> <span class="o">=</span> <span class="p">(</span><span class="kt">void</span><span class="o">*</span><span class="p">)</span> <span class="p">(</span><span class="n">s</span><span class="o">-</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">sdshdr</span><span class="p">)));</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">s</span> <span class="pre">-</span> <span class="pre">(sizeof(struct</span> <span class="pre">sdshdr))</span></code> 表示将指针向前移动到 <code class="docutils literal"><span class="pre">struct</span> <span class="pre">sdshdr</span></code> 的起点，从而得出一个指向 <code class="docutils literal"><span class="pre">sdshdr</span></code> 结构的指针：</p>
+<img alt="../../_images/sdshdr.png" src="../../_images/sdshdr.png" />
+<p><code class="docutils literal"><span class="pre">sdslen</span></code> 函数是使用这种技巧的其中一个例子：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// 返回字符串内容的实际长度</span>
+<span class="k">static</span> <span class="kr">inline</span> <span class="kt">size_t</span> <span class="nf">sdslen</span><span class="p">(</span><span class="k">const</span> <span class="n">sds</span> <span class="n">s</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="c1">// 从 sds 中计算出相应的 sdshdr 结构</span>
+    <span class="k">struct</span> <span class="n">sdshdr</span> <span class="o">*</span><span class="n">sh</span> <span class="o">=</span> <span class="p">(</span><span class="kt">void</span><span class="o">*</span><span class="p">)(</span><span class="n">s</span><span class="o">-</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">sdshdr</span><span class="p">)));</span>
+
+    <span class="k">return</span> <span class="n">sh</span><span class="o">-&gt;</span><span class="n">len</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id2">
+<h2>函数实现<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>Sds 模块中的大部分函数都是对常见字符串处理函数的重新实现或包装，这些函数的实现都非常直观，这里就不一一详细介绍了，需要了解实现细节的话，可以直接看<a class="reference external" href="https://github.com/huangz1990/reading_redis_source">带注释的源码</a> 。</p>
+<p>唯一一个需要提及的，和 Redis 的实现决策相关的函数是 <code class="docutils literal"><span class="pre">sdsMakeRoomFor</span></code> ：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cm">/* Enlarge the free space at the end of the sds string so that the caller</span>
+<span class="cm"> * is sure that after calling this function can overwrite up to addlen</span>
+<span class="cm"> * bytes after the end of the string, plus one more byte for nul term.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Note: this does not change the *size* of the sds string as returned</span>
+<span class="cm"> * by sdslen(), but only the free buffer space we have. */</span>
+<span class="c1">// 扩展 sds 的预留空间， 确保在调用这个函数之后，</span>
+<span class="c1">// sds 字符串后的 addlen + 1 bytes（for NULL） 可写</span>
+<span class="n">sds</span> <span class="nf">sdsMakeRoomFor</span><span class="p">(</span><span class="n">sds</span> <span class="n">s</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">addlen</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">struct</span> <span class="n">sdshdr</span> <span class="o">*</span><span class="n">sh</span><span class="p">,</span> <span class="o">*</span><span class="n">newsh</span><span class="p">;</span>
+    <span class="kt">size_t</span> <span class="n">free</span> <span class="o">=</span> <span class="n">sdsavail</span><span class="p">(</span><span class="n">s</span><span class="p">);</span>
+    <span class="kt">size_t</span> <span class="n">len</span><span class="p">,</span> <span class="n">newlen</span><span class="p">;</span>
+
+    <span class="c1">// 预留空间可以满足本次拼接</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">free</span> <span class="o">&gt;=</span> <span class="n">addlen</span><span class="p">)</span> <span class="k">return</span> <span class="n">s</span><span class="p">;</span>
+
+    <span class="n">len</span> <span class="o">=</span> <span class="n">sdslen</span><span class="p">(</span><span class="n">s</span><span class="p">);</span>
+    <span class="n">sh</span> <span class="o">=</span> <span class="p">(</span><span class="kt">void</span><span class="o">*</span><span class="p">)</span> <span class="p">(</span><span class="n">s</span><span class="o">-</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">sdshdr</span><span class="p">)));</span>
+
+    <span class="c1">// 设置新 sds 的字符串长度</span>
+    <span class="c1">// 这个长度比完成本次拼接实际所需的长度要大</span>
+    <span class="c1">// 通过预留空间优化下次拼接操作</span>
+    <span class="n">newlen</span> <span class="o">=</span> <span class="p">(</span><span class="n">len</span><span class="o">+</span><span class="n">addlen</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">newlen</span> <span class="o">&lt;</span> <span class="n">SDS_MAX_PREALLOC</span><span class="p">)</span>
+        <span class="n">newlen</span> <span class="o">*=</span> <span class="mi">2</span><span class="p">;</span>
+    <span class="k">else</span>
+        <span class="n">newlen</span> <span class="o">+=</span> <span class="n">SDS_MAX_PREALLOC</span><span class="p">;</span>
+
+    <span class="c1">// 重分配 sdshdr</span>
+    <span class="n">newsh</span> <span class="o">=</span> <span class="n">zrealloc</span><span class="p">(</span><span class="n">sh</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">sdshdr</span><span class="p">)</span><span class="o">+</span><span class="n">newlen</span><span class="o">+</span><span class="mi">1</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">newsh</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span> <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+
+    <span class="n">newsh</span><span class="o">-&gt;</span><span class="n">free</span> <span class="o">=</span> <span class="n">newlen</span> <span class="o">-</span> <span class="n">len</span><span class="p">;</span>
+
+    <span class="c1">// 只返回字符串部分</span>
+    <span class="k">return</span> <span class="n">newsh</span><span class="o">-&gt;</span><span class="n">buf</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>从 <code class="docutils literal"><span class="pre">newlen</span></code> 变量的设置可以看出，如果 <code class="docutils literal"><span class="pre">newlen</span></code> 小于 <code class="docutils literal"><span class="pre">SDS_MAX_PREALLOC</span></code> ，那么 <code class="docutils literal"><span class="pre">newlen</span></code> 的实际值会比所需的长度多出一倍；如果 <code class="docutils literal"><span class="pre">newlen</span></code> 的值大于 <code class="docutils literal"><span class="pre">SDS_MAX_PREALLOC</span></code> ，那么 <code class="docutils literal"><span class="pre">newlen</span></code> 的实际值会加上 <code class="docutils literal"><span class="pre">SDS_MAX_PREALLOC</span></code> （目前 2.9.7 版本的 <code class="docutils literal"><span class="pre">SDS_MAX_PREALLOC</span></code> 默认值为 <code class="docutils literal"><span class="pre">1024</span> <span class="pre">*</span> <span class="pre">1024</span></code> ）。</p>
+<p>这种内存分配策略表明， 在对 sds 值进行扩展（expand）时，总会预留额外的空间，通过花费更多的内存，减少了对内存进行重分配（reallocate）的次数，并优化下次扩展操作的处理速度。</p>
+<p>优化扩展操作的一个例子就是 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/append.html">APPEND</a> 命令： <code class="docutils literal"><span class="pre">APPEND</span></code> 命令在执行时会调用 <code class="docutils literal"><span class="pre">sdsMakeRoomFor</span></code> ，多预留一部分空间。当下次再执行 <code class="docutils literal"><span class="pre">APPEND</span></code> 的时候，如果要拼接的字符串长度 <code class="docutils literal"><span class="pre">addlen</span></code> 不超过 <code class="docutils literal"><span class="pre">sdshdr.free</span></code> （上次 <code class="docutils literal"><span class="pre">APPEND</span></code> 时预留的空间），那么就可以略过内存重分配操作，直接进行字符串拼接操作。</p>
+<p>相反，如果不使用这种策略，那么每次进行 <code class="docutils literal"><span class="pre">APPEND</span></code> 都要对内存进行重分配。</p>
+<p>注意，初次创建 <code class="docutils literal"><span class="pre">sds</span></code> 值时并不会预留多余的空间（查看前面给出的 <code class="docutils literal"><span class="pre">sdsnewlen</span></code> 定义），只有在调用 <code class="docutils literal"><span class="pre">sdsMakeRoomFor</span></code> 起码一次之后， <code class="docutils literal"><span class="pre">sds</span></code> 才会有预留空间，而且 sds 模块中也有相应的紧缩空间函数 <code class="docutils literal"><span class="pre">sdsRemoveFreeSpace</span></code> 。因此，Redis 对 <code class="docutils literal"><span class="pre">sds</span></code> 值的这种扩展策略实际上不会浪费多少内存，但它对一些需要多次执行字符串拼接的 Redis 模式来说，却会获得不错的优化效果（因为频繁的内存重分配是一种比较昂贵的工作）。</p>
+</div>
+<div class="section" id="id4">
+<h2>结语<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h2>
+<p>以上就是本篇文章的全部内容了，文章首先介绍了 <code class="docutils literal"><span class="pre">sds</span></code> 类型和 <code class="docutils literal"><span class="pre">sdshdr</span></code> 结构，接着说明 Redis 是如何通过指针运算，从而将 <code class="docutils literal"><span class="pre">sdshdr</span></code> 当作 <code class="docutils literal"><span class="pre">sds</span></code> 来处理的，最后介绍了 Redis 的 sds 重分配策略是如何优化字符串拼接操作的。</p>
+<p>如果对 <code class="docutils literal"><span class="pre">sds.h</span></code> 和 <code class="docutils literal"><span class="pre">sds.c</span></code> 源码的全部细节感兴趣，可以在 github 查看带有详细注释的源码： <a class="reference external" href="https://github.com/huangz1990/reading_redis_source">https://github.com/huangz1990/reading_redis_source</a> 。</p>
+</div>
+<div class="section" id="id5">
+<h2>参考资料<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h2>
+<p>本文部分内容引用自 Redis 官网上的 <a class="reference external" href="http://redis.io/topics/internals-sds">Hacking String 文章</a> 。</p>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">SDS 结构</a><ul>
+<li><a class="reference internal" href="#id1">数据类型定义</a></li>
+<li><a class="reference internal" href="#sdshdr-sds">将 sdshdr 用作 sds</a></li>
+<li><a class="reference internal" href="#id2">函数实现</a></li>
+<li><a class="reference internal" href="#id4">结语</a></li>
+<li><a class="reference internal" href="#id5">参考资料</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="dict.html"
+                        title="previous chapter">字典</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="lua-scripting.html"
+                        title="next chapter">Lua 脚本</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

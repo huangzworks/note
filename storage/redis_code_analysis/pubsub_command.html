@@ -1,0 +1,360 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>PUBSUB 命令 &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="up" title="Redis 源码分析" href="index.html" />
+    <link rel="next" title="复制（replication）" href="replication.html" />
+    <link rel="prev" title="键空间通知" href="keyspace-notification.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="replication.html" title="复制（replication）"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="keyspace-notification.html" title="键空间通知"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Redis 源码分析</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="pubsub">
+<h1>PUBSUB 命令<a class="headerlink" href="#pubsub" title="Permalink to this headline">¶</a></h1>
+<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/pubsub.html#pubsub" title="(in Redis 命令参考 v2.8)"><em class="xref std std-ref">PUBSUB</em></a> 是 Redis 2.8 版本新增的命令，
+用于对发布与订阅功能进行自省，
+它的功能包括：</p>
+<ul class="simple">
+<li><code class="docutils literal"><span class="pre">PUBSUB</span> <span class="pre">CHANNELS</span></code> 子命令查看服务器目前有多少个频道被订阅。</li>
+<li><code class="docutils literal"><span class="pre">PUBSUB</span> <span class="pre">NUMSUB</span></code> 子命令查看某个频道有多少个订阅者（订阅这个频道的客户端）。</li>
+<li><code class="docutils literal"><span class="pre">PUBSUB</span> <span class="pre">NUMPAT</span></code> 子命令查看某个模式有多少订阅者。</li>
+</ul>
+<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/pubsub.html#pubsub" title="(in Redis 命令参考 v2.8)"><em>PUBSUB</em></a> 的具体功能可以参考 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/pubsub.html#pubsub" title="(in Redis 命令参考 v2.8)"><em class="xref std std-ref">PUBSUB 命令的文档</em></a> ，
+本文只对 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/pubsub.html#pubsub" title="(in Redis 命令参考 v2.8)"><em>PUBSUB</em></a> 命令的实现进行分析，
+而不对 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/pubsub.html#pubsub" title="(in Redis 命令参考 v2.8)"><em>PUBSUB</em></a> 的作用本身做详细的介绍。</p>
+<div class="section" id="pubsub-channels">
+<h2>PUBSUB CHANNELS<a class="headerlink" href="#pubsub-channels" title="Permalink to this headline">¶</a></h2>
+<p>首先来看 <code class="docutils literal"><span class="pre">PUBSUB</span> <span class="pre">CHANNELS</span></code> 子命令 ——
+这个命令的格式为 <code class="docutils literal"><span class="pre">PUBSUB</span> <span class="pre">CHANNELS</span> <span class="pre">[pattern]</span></code> ：</p>
+<ul class="simple">
+<li>当不给定 <code class="docutils literal"><span class="pre">pattern</span></code> 参数的时候，
+命令返回当前服务器中被订阅的所有频道（的名字）。</li>
+<li>而当给定 <code class="docutils literal"><span class="pre">pattern</span></code> 参数的时候，
+命令返回当前服务器中和 <code class="docutils literal"><span class="pre">pattern</span></code> 模式相匹配的所有频道（的名字）。</li>
+</ul>
+<p>以下是 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/pubsub.html#pubsub" title="(in Redis 命令参考 v2.8)"><em>PUBSUB</em></a> 命令关于 <code class="docutils literal"><span class="pre">CHANNELS</span></code> 子命令的代码：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// PUBSUB CHANNELS [pattern] 子命令</span>
+<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">strcasecmp</span><span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">,</span><span class="s">&quot;channels&quot;</span><span class="p">)</span> <span class="o">&amp;&amp;</span>
+    <span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argc</span> <span class="o">==</span> <span class="mi">2</span> <span class="o">||</span> <span class="n">c</span><span class="o">-&gt;</span><span class="n">argc</span> <span class="o">==</span><span class="mi">3</span><span class="p">))</span>
+<span class="p">{</span>
+    <span class="cm">/* PUBSUB CHANNELS [&lt;pattern&gt;] */</span>
+    <span class="c1">// 检查命令请求是否给定了 pattern 参数</span>
+    <span class="c1">// 如果没有给定的话，就设为 NULL</span>
+    <span class="n">sds</span> <span class="n">pat</span> <span class="o">=</span> <span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argc</span> <span class="o">==</span> <span class="mi">2</span><span class="p">)</span> <span class="o">?</span> <span class="nb">NULL</span> <span class="o">:</span> <span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">;</span>
+
+    <span class="c1">// 创建 pubsub_channels 的字典迭代器</span>
+    <span class="c1">// 该字典的键为频道，值为链表</span>
+    <span class="c1">// 链表中保存了所有订阅键所对应的频道的客户端</span>
+    <span class="n">dictIterator</span> <span class="o">*</span><span class="n">di</span> <span class="o">=</span> <span class="n">dictGetIterator</span><span class="p">(</span><span class="n">server</span><span class="p">.</span><span class="n">pubsub_channels</span><span class="p">);</span>
+    <span class="n">dictEntry</span> <span class="o">*</span><span class="n">de</span><span class="p">;</span>
+    <span class="kt">long</span> <span class="n">mblen</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="kt">void</span> <span class="o">*</span><span class="n">replylen</span><span class="p">;</span>
+
+    <span class="n">replylen</span> <span class="o">=</span> <span class="n">addDeferredMultiBulkLength</span><span class="p">(</span><span class="n">c</span><span class="p">);</span>
+    <span class="c1">// 从迭代器中获取一个客户端</span>
+    <span class="k">while</span><span class="p">((</span><span class="n">de</span> <span class="o">=</span> <span class="n">dictNext</span><span class="p">(</span><span class="n">di</span><span class="p">))</span> <span class="o">!=</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+
+        <span class="c1">// 从字典中取出客户端所订阅的频道</span>
+        <span class="n">robj</span> <span class="o">*</span><span class="n">cobj</span> <span class="o">=</span> <span class="n">dictGetKey</span><span class="p">(</span><span class="n">de</span><span class="p">);</span>
+        <span class="n">sds</span> <span class="n">channel</span> <span class="o">=</span> <span class="n">cobj</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">;</span>
+
+        <span class="c1">// 顺带一提</span>
+        <span class="c1">// 因为 Redis 的字典实现只能遍历字典的值（客户端）</span>
+        <span class="c1">// 所以这里才会有遍历字典值然后通过字典值取出字典键（频道）的蹩脚用法</span>
+
+        <span class="c1">// 如果没有给定 pattern 参数，那么打印所有找到的频道</span>
+        <span class="c1">// 如果给定了 pattern 参数，那么只打印和 pattern 相匹配的频道</span>
+        <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">pat</span> <span class="o">||</span> <span class="n">stringmatchlen</span><span class="p">(</span><span class="n">pat</span><span class="p">,</span> <span class="n">sdslen</span><span class="p">(</span><span class="n">pat</span><span class="p">),</span>
+                                   <span class="n">channel</span><span class="p">,</span> <span class="n">sdslen</span><span class="p">(</span><span class="n">channel</span><span class="p">),</span><span class="mi">0</span><span class="p">))</span>
+        <span class="p">{</span>
+            <span class="c1">// 向客户端输出频道</span>
+            <span class="n">addReplyBulk</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">cobj</span><span class="p">);</span>
+            <span class="n">mblen</span><span class="o">++</span><span class="p">;</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+    <span class="c1">// 释放字典迭代器</span>
+    <span class="n">dictReleaseIterator</span><span class="p">(</span><span class="n">di</span><span class="p">);</span>
+    <span class="n">setDeferredMultiBulkLength</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">replylen</span><span class="p">,</span><span class="n">mblen</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>理解这个命令的最重要的地方就是理解服务器的 <code class="docutils literal"><span class="pre">pubsub_channels</span></code> 字典，
+如果不清楚这个字典的作用（或者忘记了的话），
+请参考《Redis 设计与实现》的《<a class="reference external" href="http://www.redisbook.com/en/latest/feature/pubsub.html#id3">订阅频道</a>》小节。</p>
+</div>
+<div class="section" id="pubsub-numsub">
+<h2>PUBSUB NUMSUB<a class="headerlink" href="#pubsub-numsub" title="Permalink to this headline">¶</a></h2>
+<p><code class="docutils literal"><span class="pre">PUBSUB</span> <span class="pre">NUMSUB</span></code> 子命令的格式为 <code class="docutils literal"><span class="pre">PUBSUB</span> <span class="pre">NUMSUB</span> <span class="pre">[channel-1</span> <span class="pre">channel-2</span> <span class="pre">...</span> <span class="pre">channel-n]</span></code> ：
+命令接收任意数量的频道名字，
+并返回频道的订阅者数量（有多少个客户端在订阅这个频道）。</p>
+<p>以下是 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/pubsub.html#pubsub" title="(in Redis 命令参考 v2.8)"><em>PUBSUB</em></a> 命令关于 <code class="docutils literal"><span class="pre">NUMSUB</span></code> 子命令的代码：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// PUBSUB NUMSUB [channel-1 channel-2 ... channel-N] 子命令</span>
+<span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">strcasecmp</span><span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">,</span><span class="s">&quot;numsub&quot;</span><span class="p">)</span> <span class="o">&amp;&amp;</span> <span class="n">c</span><span class="o">-&gt;</span><span class="n">argc</span> <span class="o">&gt;=</span> <span class="mi">2</span><span class="p">)</span> <span class="p">{</span>
+    <span class="cm">/* PUBSUB NUMSUB [Channel_1 ... Channel_N] */</span>
+    <span class="kt">int</span> <span class="n">j</span><span class="p">;</span>
+
+    <span class="n">addReplyMultiBulkLen</span><span class="p">(</span><span class="n">c</span><span class="p">,(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argc</span><span class="o">-</span><span class="mi">2</span><span class="p">)</span><span class="o">*</span><span class="mi">2</span><span class="p">);</span>
+    <span class="k">for</span> <span class="p">(</span><span class="n">j</span> <span class="o">=</span> <span class="mi">2</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">c</span><span class="o">-&gt;</span><span class="n">argc</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+
+        <span class="c1">// c-&gt;argv[j] 也即是客户端输入的第 N 个频道名字</span>
+        <span class="c1">// pubsub_channels 的字典为频道名字</span>
+        <span class="c1">// 而值则是保存了 c-&gt;argv[j] 频道所有订阅者的链表</span>
+        <span class="c1">// 而调用 dictFetchValue 也就是取出所有订阅给定频道的客户端</span>
+        <span class="n">list</span> <span class="o">*</span><span class="n">l</span> <span class="o">=</span> <span class="n">dictFetchValue</span><span class="p">(</span><span class="n">server</span><span class="p">.</span><span class="n">pubsub_channels</span><span class="p">,</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">[</span><span class="n">j</span><span class="p">]);</span>
+
+        <span class="n">addReplyBulk</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">[</span><span class="n">j</span><span class="p">]);</span>
+        <span class="c1">// 向客户端返回链表的长度属性</span>
+        <span class="c1">// 这个属性就是某个频道的订阅者数量</span>
+        <span class="c1">// 例如：如果一个频道有三个订阅者，那么链表的长度就是 3</span>
+        <span class="c1">// 而返回给客户端的数字也是三</span>
+        <span class="n">addReplyBulkLongLong</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">l</span> <span class="o">?</span> <span class="n">listLength</span><span class="p">(</span><span class="n">l</span><span class="p">)</span> <span class="o">:</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>和 <code class="docutils literal"><span class="pre">PUBSUB</span> <span class="pre">CHANNELS</span></code> 命令一样，
+理解 <code class="docutils literal"><span class="pre">PUBSUB</span> <span class="pre">NUMSUB</span></code> 命令最重要的就是理解服务器的 <code class="docutils literal"><span class="pre">pubsub_channels</span></code> 字典，
+如果不理解这个字典的话，
+请去《Redis 设计于实现》中看看关于 <code class="docutils literal"><span class="pre">pubsub_channels</span></code> 字典的部分。</p>
+</div>
+<div class="section" id="pubsub-numpat">
+<h2>PUBSUB NUMPAT<a class="headerlink" href="#pubsub-numpat" title="Permalink to this headline">¶</a></h2>
+<p><code class="docutils literal"><span class="pre">PUBSUB</span> <span class="pre">NUMPAT</span></code> 命令返回服务器当前被订阅模式的数量，
+以下是 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/pubsub.html#pubsub" title="(in Redis 命令参考 v2.8)"><em>PUBSUB</em></a> 命令中关于 <code class="docutils literal"><span class="pre">NUMPAT</span></code> 子命令部分的代码：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// PUBSUB NUMPAT 子命令</span>
+<span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">strcasecmp</span><span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">,</span><span class="s">&quot;numpat&quot;</span><span class="p">)</span> <span class="o">&amp;&amp;</span> <span class="n">c</span><span class="o">-&gt;</span><span class="n">argc</span> <span class="o">==</span> <span class="mi">2</span><span class="p">)</span> <span class="p">{</span>
+    <span class="cm">/* PUBSUB NUMPAT */</span>
+
+    <span class="c1">// pubsub_patterns 链表保存了服务器中所有被订阅的模式</span>
+    <span class="c1">// pubsub_patterns 的长度就是服务器中被订阅模式的数量</span>
+    <span class="n">addReplyLongLong</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">listLength</span><span class="p">(</span><span class="n">server</span><span class="p">.</span><span class="n">pubsub_patterns</span><span class="p">));</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>理解 <code class="docutils literal"><span class="pre">NUMPAT</span></code> 子命令的关键就是理解服务器的 <code class="docutils literal"><span class="pre">pubsub_patterns</span></code> 链表，
+这个链表保存了服务器中所有被订阅的模式。</p>
+<p>如果不了解这个 <code class="docutils literal"><span class="pre">pubsub_patterns</span></code> 链表（或者忘记了）的话，
+请参考《Redis 设计与实现》一书的《<a class="reference external" href="http://www.redisbook.com/en/latest/feature/pubsub.html#id7">订阅模式</a>》小节。</p>
+</div>
+<div class="section" id="id3">
+<h2>PUBSUB 命令的完整代码<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<p>以下是带注释的 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/pubsub.html#pubsub" title="(in Redis 命令参考 v2.8)"><em>PUBSUB</em></a> 命令的完整代码：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cm">/* PUBSUB command for Pub/Sub introspection. */</span>
+<span class="kt">void</span> <span class="nf">pubsubCommand</span><span class="p">(</span><span class="n">redisClient</span> <span class="o">*</span><span class="n">c</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="c1">// PUBSUB CHANNELS [pattern] 子命令</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">strcasecmp</span><span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">,</span><span class="s">&quot;channels&quot;</span><span class="p">)</span> <span class="o">&amp;&amp;</span>
+        <span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argc</span> <span class="o">==</span> <span class="mi">2</span> <span class="o">||</span> <span class="n">c</span><span class="o">-&gt;</span><span class="n">argc</span> <span class="o">==</span><span class="mi">3</span><span class="p">))</span>
+    <span class="p">{</span>
+        <span class="cm">/* PUBSUB CHANNELS [&lt;pattern&gt;] */</span>
+        <span class="c1">// 检查命令请求是否给定了 pattern 参数</span>
+        <span class="c1">// 如果没有给定的话，就设为 NULL</span>
+        <span class="n">sds</span> <span class="n">pat</span> <span class="o">=</span> <span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argc</span> <span class="o">==</span> <span class="mi">2</span><span class="p">)</span> <span class="o">?</span> <span class="nb">NULL</span> <span class="o">:</span> <span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">;</span>
+
+        <span class="c1">// 创建 pubsub_channels 的字典迭代器</span>
+        <span class="c1">// 该字典的键为频道，值为链表</span>
+        <span class="c1">// 链表中保存了所有订阅键所对应的频道的客户端</span>
+        <span class="n">dictIterator</span> <span class="o">*</span><span class="n">di</span> <span class="o">=</span> <span class="n">dictGetIterator</span><span class="p">(</span><span class="n">server</span><span class="p">.</span><span class="n">pubsub_channels</span><span class="p">);</span>
+        <span class="n">dictEntry</span> <span class="o">*</span><span class="n">de</span><span class="p">;</span>
+        <span class="kt">long</span> <span class="n">mblen</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+        <span class="kt">void</span> <span class="o">*</span><span class="n">replylen</span><span class="p">;</span>
+
+        <span class="n">replylen</span> <span class="o">=</span> <span class="n">addDeferredMultiBulkLength</span><span class="p">(</span><span class="n">c</span><span class="p">);</span>
+        <span class="c1">// 从迭代器中获取一个客户端</span>
+        <span class="k">while</span><span class="p">((</span><span class="n">de</span> <span class="o">=</span> <span class="n">dictNext</span><span class="p">(</span><span class="n">di</span><span class="p">))</span> <span class="o">!=</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+
+            <span class="c1">// 从字典中取出客户端所订阅的频道</span>
+            <span class="n">robj</span> <span class="o">*</span><span class="n">cobj</span> <span class="o">=</span> <span class="n">dictGetKey</span><span class="p">(</span><span class="n">de</span><span class="p">);</span>
+            <span class="n">sds</span> <span class="n">channel</span> <span class="o">=</span> <span class="n">cobj</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">;</span>
+
+            <span class="c1">// 顺带一提</span>
+            <span class="c1">// 因为 Redis 的字典实现只能遍历字典的值（客户端）</span>
+            <span class="c1">// 所以这里才会有遍历字典值然后通过字典值取出字典键（频道）的蹩脚用法</span>
+
+            <span class="c1">// 如果没有给定 pattern 参数，那么打印所有找到的频道</span>
+            <span class="c1">// 如果给定了 pattern 参数，那么只打印和 pattern 相匹配的频道</span>
+            <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">pat</span> <span class="o">||</span> <span class="n">stringmatchlen</span><span class="p">(</span><span class="n">pat</span><span class="p">,</span> <span class="n">sdslen</span><span class="p">(</span><span class="n">pat</span><span class="p">),</span>
+                                       <span class="n">channel</span><span class="p">,</span> <span class="n">sdslen</span><span class="p">(</span><span class="n">channel</span><span class="p">),</span><span class="mi">0</span><span class="p">))</span>
+            <span class="p">{</span>
+                <span class="c1">// 向客户端输出频道</span>
+                <span class="n">addReplyBulk</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">cobj</span><span class="p">);</span>
+                <span class="n">mblen</span><span class="o">++</span><span class="p">;</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+        <span class="c1">// 释放字典迭代器</span>
+        <span class="n">dictReleaseIterator</span><span class="p">(</span><span class="n">di</span><span class="p">);</span>
+        <span class="n">setDeferredMultiBulkLength</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">replylen</span><span class="p">,</span><span class="n">mblen</span><span class="p">);</span>
+
+    <span class="c1">// PUBSUB NUMSUB [channel-1 channel-2 ... channel-N] 子命令</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">strcasecmp</span><span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">,</span><span class="s">&quot;numsub&quot;</span><span class="p">)</span> <span class="o">&amp;&amp;</span> <span class="n">c</span><span class="o">-&gt;</span><span class="n">argc</span> <span class="o">&gt;=</span> <span class="mi">2</span><span class="p">)</span> <span class="p">{</span>
+        <span class="cm">/* PUBSUB NUMSUB [Channel_1 ... Channel_N] */</span>
+        <span class="kt">int</span> <span class="n">j</span><span class="p">;</span>
+
+        <span class="n">addReplyMultiBulkLen</span><span class="p">(</span><span class="n">c</span><span class="p">,(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argc</span><span class="o">-</span><span class="mi">2</span><span class="p">)</span><span class="o">*</span><span class="mi">2</span><span class="p">);</span>
+        <span class="k">for</span> <span class="p">(</span><span class="n">j</span> <span class="o">=</span> <span class="mi">2</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">c</span><span class="o">-&gt;</span><span class="n">argc</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+
+            <span class="c1">// c-&gt;argv[j] 也即是客户端输入的第 N 个频道名字</span>
+            <span class="c1">// pubsub_channels 的字典为频道名字</span>
+            <span class="c1">// 而值则是保存了 c-&gt;argv[j] 频道所有订阅者的链表</span>
+            <span class="c1">// 而调用 dictFetchValue 也就是取出所有订阅给定频道的客户端</span>
+            <span class="n">list</span> <span class="o">*</span><span class="n">l</span> <span class="o">=</span> <span class="n">dictFetchValue</span><span class="p">(</span><span class="n">server</span><span class="p">.</span><span class="n">pubsub_channels</span><span class="p">,</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">[</span><span class="n">j</span><span class="p">]);</span>
+
+            <span class="n">addReplyBulk</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">[</span><span class="n">j</span><span class="p">]);</span>
+            <span class="c1">// 向客户端返回链表的长度属性</span>
+            <span class="c1">// 这个属性就是某个频道的订阅者数量</span>
+            <span class="c1">// 例如：如果一个频道有三个订阅者，那么链表的长度就是 3</span>
+            <span class="c1">// 而返回给客户端的数字也是三</span>
+            <span class="n">addReplyBulkLongLong</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">l</span> <span class="o">?</span> <span class="n">listLength</span><span class="p">(</span><span class="n">l</span><span class="p">)</span> <span class="o">:</span> <span class="mi">0</span><span class="p">);</span>
+        <span class="p">}</span>
+
+    <span class="c1">// PUBSUB NUMPAT 子命令</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">strcasecmp</span><span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">,</span><span class="s">&quot;numpat&quot;</span><span class="p">)</span> <span class="o">&amp;&amp;</span> <span class="n">c</span><span class="o">-&gt;</span><span class="n">argc</span> <span class="o">==</span> <span class="mi">2</span><span class="p">)</span> <span class="p">{</span>
+        <span class="cm">/* PUBSUB NUMPAT */</span>
+
+        <span class="c1">// pubsub_patterns 链表保存了服务器中所有被订阅的模式</span>
+        <span class="c1">// pubsub_patterns 的长度就是服务器中被订阅模式的数量</span>
+        <span class="n">addReplyLongLong</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">listLength</span><span class="p">(</span><span class="n">server</span><span class="p">.</span><span class="n">pubsub_patterns</span><span class="p">));</span>
+
+    <span class="c1">// 错误处理</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="n">addReplyErrorFormat</span><span class="p">(</span><span class="n">c</span><span class="p">,</span>
+            <span class="s">&quot;Unknown PUBSUB subcommand or wrong number of arguments for &#39;%s&#39;&quot;</span><span class="p">,</span>
+            <span class="p">(</span><span class="kt">char</span><span class="o">*</span><span class="p">)</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="eof">
+<h2>EOF<a class="headerlink" href="#eof" title="Permalink to this headline">¶</a></h2>
+<p>以上就是本文的全部内容，
+谢谢阅读！</p>
+<div class="line-block">
+<div class="line">huangz</div>
+<div class="line">2013.7.11</div>
+</div>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">PUBSUB 命令</a><ul>
+<li><a class="reference internal" href="#pubsub-channels">PUBSUB CHANNELS</a></li>
+<li><a class="reference internal" href="#pubsub-numsub">PUBSUB NUMSUB</a></li>
+<li><a class="reference internal" href="#pubsub-numpat">PUBSUB NUMPAT</a></li>
+<li><a class="reference internal" href="#id3">PUBSUB 命令的完整代码</a></li>
+<li><a class="reference internal" href="#eof">EOF</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="keyspace-notification.html"
+                        title="previous chapter">键空间通知</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="replication.html"
+                        title="next chapter">复制（replication）</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

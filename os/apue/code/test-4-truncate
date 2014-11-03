@@ -1,5 +1,0 @@
-// 4-truncate.c
-
-#include <unistd.h> // truncate
-#include <stdio.h>  // stderr, fprintf, perror
-#inc

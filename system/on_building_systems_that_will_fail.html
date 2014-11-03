@@ -1,0 +1,197 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>On Building Systems That Will Fail 笔记 &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../index.html" />
+    <link rel="next" title="《Computer Systems : A Programmer’s Perspective, 2e》笔记" href="csapp/index.html" />
+    <link rel="prev" title="将字符串解释为数字 —— Parse string to number" href="../algorithm/arithmetic/parse-string-to-number.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="csapp/index.html" title="《Computer Systems : A Programmer’s Perspective, 2e》笔记"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="../algorithm/arithmetic/parse-string-to-number.html" title="将字符串解释为数字 —— Parse string to number"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">huangz/note</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="on-building-systems-that-will-fail">
+<h1>On Building Systems That Will Fail 笔记<a class="headerlink" href="#on-building-systems-that-will-fail" title="Permalink to this headline">¶</a></h1>
+<p><a class="reference external" href="http://en.wikipedia.org/wiki/Fernando_J._Corbat%C3%B3">Fernando J. Corbató</a> 领导并组织构建了 <a class="reference external" href="http://en.wikipedia.org/wiki/Compatible_Time-Sharing_System">CTSS</a> 和 <a class="reference external" href="http://en.wikipedia.org/wiki/Multics">Multics</a> 系统。</p>
+<p>因为在通用、大规模兼容分时和资源共享的计算机系统方面的卓越贡献，他获得了 1990 年的图灵奖，而《<a class="reference external" href="http://larch-www.lcs.mit.edu:8001/~corbato/turing91/)">On Building Systems That Will Fail</a>》就是他的获奖发言。</p>
+<p>文章讲述了他在构建 CTSS 和 Multics 时的经历，关于如何构建系统、以及如何处理系统失效。</p>
+<div class="section" id="id2">
+<h2>关于庞大的系统<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>那些庞大的系统通常具有以下属性：</p>
+<ol class="arabic simple">
+<li>规模庞大</li>
+<li>太复杂，以至于导致人手不足</li>
+<li>构建时间很长</li>
+<li>（因为太昂贵）而不可能被放弃</li>
+<li>永远也完成不了！</li>
+<li>很少能完全像预想中那样工作，有时会以一种剧烈的方式出错</li>
+</ol>
+<p>以上是一些负面的属性，下面是庞大的系统的一些好的方面：</p>
+<ol class="arabic simple" start="7">
+<li>探索系统中的那些未知的部分令人振奋</li>
+<li>开辟出一个新的服务，或者新的领域，成为人们的必需品</li>
+<li>引发一系列后续创新</li>
+</ol>
+</div>
+<div class="section" id="id3">
+<h2>庞大的系统是如何出错的<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<p>构建庞大的系统非常困难，以下是一些可能造成失败的原因：</p>
+<ol class="arabic simple">
+<li>使用正确的技术构建了错误的产品</li>
+<li>微妙的错误非常难以避免，甚至在某种程度上是不可避免的</li>
+<li>误解了程序模型，或者使用了错误的模型</li>
+<li>系统本身、或者系统依赖的底层系统改变得太快</li>
+<li>对于构建一个需要处理大量新问题的系统来说，错误是不可避免的</li>
+<li>在添加新特性时，忘记了旧有的假设，就会引发系统设计方面的 bug</li>
+<li>即使是有经验的程序员也会出错</li>
+</ol>
+</div>
+<div class="section" id="id4">
+<h2>复杂性的来源<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h2>
+<p>构建系统时的复杂性来源于以下方面：</p>
+<ol class="arabic simple">
+<li>人员的规模，以及由此产生出的信息传播失真，以及争论</li>
+<li>编程仍然是一个探索中的领域</li>
+<li>通常要基于假设对系统进行取舍</li>
+<li>底层系统的不完美</li>
+<li>要处理的条件太多</li>
+<li>没有一种好的语言来描述系统状况，统计数据常常被误用或者被误解</li>
+<li>变化太快</li>
+<li>程序的使用者 —— 人 —— 以及由之而来的复杂性</li>
+</ol>
+</div>
+<div class="section" id="id5">
+<h2>结论<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h2>
+<ol class="arabic simple">
+<li>要向前迈进，构建庞大的系统是不可避免的</li>
+<li>在庞大的系统中，错误是不可避免的</li>
+<li>简洁和优雅非常重要：用最少的机制和最大的清晰度来完成给定的功能</li>
+<li>使用隐喻：减少误解，加快理解，改善沟通，关注高层次而不是细节</li>
+<li>使用受限的语言：让程序员和设计师在给定的范围内讨论，不会产生不着边际的想法</li>
+<li>和人以及机器的错误作斗争，处理那些关键的失效错误部分</li>
+<li>在设计系统时，应该假设它会被持续的更新和修复，通过高维度的功能和结构模块化，来产生一个易于修改的系统。</li>
+<li>出错时，不要慌张，要找原因</li>
+<li>从错误中学习，同时对新解决方案的可能性保持警觉</li>
+<li>团队成员应该互相学习，互相教育</li>
+</ol>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">On Building Systems That Will Fail 笔记</a><ul>
+<li><a class="reference internal" href="#id2">关于庞大的系统</a></li>
+<li><a class="reference internal" href="#id3">庞大的系统是如何出错的</a></li>
+<li><a class="reference internal" href="#id4">复杂性的来源</a></li>
+<li><a class="reference internal" href="#id5">结论</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="../algorithm/arithmetic/parse-string-to-number.html"
+                        title="previous chapter">将字符串解释为数字 —— Parse string to number</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="csapp/index.html"
+                        title="next chapter">《Computer Systems : A Programmer&#8217;s Perspective, 2e》笔记</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

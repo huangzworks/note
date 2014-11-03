@@ -1,0 +1,412 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>发布/订阅 &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="up" title="Redis 源码分析" href="index.html" />
+    <link rel="next" title="事务" href="transaction.html" />
+    <link rel="prev" title="事件驱动" href="event-driven.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="transaction.html" title="事务"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="event-driven.html" title="事件驱动"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Redis 源码分析</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>发布/订阅<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<p>Redis 通过 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/publish.html">PUBLISH</a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/subscribe.html">SUBSCRIBE</a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/psubscribe.html">PSUBSCRIBE</a> 等命令实现发布和订阅功能。</p>
+<p>这些命令被广泛用于构建即时通信应用，比如网络聊天室（chatroom）和实时广播、实时提醒等。</p>
+<p>本文通过分析 Redis 源码里的 <code class="docutils literal"><span class="pre">pubsub.c</span></code> 文件，了解发布和订阅机制的底层实现，籍此加深对 Redis 的理解。</p>
+<div class="section" id="id2">
+<h2>订阅、发布和退订<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>在开始研究源码之前，不妨先来回顾一下几个相关命令的使用方式。</p>
+<p><code class="docutils literal"><span class="pre">PUBLISH</span></code> 命令用于向给定的频道发送信息，返回值为接收到信息的订阅者数量：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">redis</span><span class="o">&gt;</span> <span class="n">PUBLISH</span> <span class="n">treehole</span> <span class="s">&quot;top secret here ...&quot;</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">0</span>
+
+<span class="n">redis</span><span class="o">&gt;</span> <span class="n">PUBLISH</span> <span class="n">chatroom</span> <span class="s">&quot;hi?&quot;</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">1</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">SUBSCRIBE</span></code> 命令订阅给定的一个或多个频道：</p>
+<div class="highlight-c"><div class="highlight"><pre>redis&gt; SUBSCRIBE chatroom
+Reading messages... (press Ctrl-C to quit)
+1) &quot;subscribe&quot;  # 订阅反馈
+2) &quot;chatroom&quot;   # 订阅的频道
+3) (integer) 1  # 目前客户端已订阅频道/模式的数量
+
+1) &quot;message&quot;    # 信息
+2) &quot;chatroom&quot;   # 发送信息的频道
+3) &quot;hi?&quot;        # 信息内容
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">SUBSCRIBE</span></code> 的返回值当中， <code class="docutils literal"><span class="pre">1)</span></code> 为 <code class="docutils literal"><span class="pre">subscribe</span></code> 的是订阅的反馈信息，而 <code class="docutils literal"><span class="pre">1)</span></code> 为 <code class="docutils literal"><span class="pre">message</span></code> 的则是订阅的频道所发送的信息。</p>
+<p><code class="docutils literal"><span class="pre">SUBSCRIBE</span></code> 还可以订阅多个频道，这样一来它接收到的信息就可能来自多个频道：</p>
+<div class="highlight-c"><div class="highlight"><pre>redis&gt; SUBSCRIBE chatroom talk-to-jack
+Reading messages... (press Ctrl-C to quit)
+1) &quot;subscribe&quot;          # 订阅 chatroom 的反馈
+2) &quot;chatroom&quot;
+3) (integer) 1
+
+1) &quot;subscribe&quot;          # 订阅 talk-to-jack 的反馈
+2) &quot;talk-to-jack&quot;
+3) (integer) 2
+
+1) &quot;message&quot;            # 来自 chatroom 的消息
+2) &quot;chatroom&quot;
+3) &quot;yahoo&quot;
+
+1) &quot;message&quot;            # 来自 talk-to-peter 的消息
+2) &quot;talk-to-jack&quot;
+3) &quot;Goodmorning, peter.&quot;
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">PSUBSCRIBE</span></code> 提供了一种订阅符合给定模式的所有频道的方法，比如说，使用 <code class="docutils literal"><span class="pre">it.*</span></code> 为输入，就可以订阅所有以 <code class="docutils literal"><span class="pre">it.</span></code> 开头的频道，比如  <code class="docutils literal"><span class="pre">it.news</span></code> 、 <code class="docutils literal"><span class="pre">it.blog</span></code> 、 <code class="docutils literal"><span class="pre">it.tweets</span></code> ，诸如此类：</p>
+<div class="highlight-c"><div class="highlight"><pre>redis&gt; PSUBSCRIBE it.*
+Reading messages... (press Ctrl-C to quit)
+1) &quot;psubscribe&quot;
+2) &quot;it.*&quot;
+3) (integer) 1
+
+1) &quot;pmessage&quot;
+2) &quot;it.*&quot;                   # 匹配的模式
+3) &quot;it.news&quot;                # 消息的来源频道
+4) &quot;Redis 2.6rc5 release&quot;   # 消息内容
+
+1) &quot;pmessage&quot;
+2) &quot;it.*&quot;
+3) &quot;it.blog&quot;
+4) &quot;Why NoSQL matters&quot;
+
+1) &quot;pmessage&quot;
+2) &quot;it.*&quot;
+3) &quot;it.tweet&quot;
+4) &quot;@redis: when will the 2.6 stable release?&quot;
+</pre></div>
+</div>
+<p>当然， <code class="docutils literal"><span class="pre">PSUBSCRIBE</span></code> 也可以接受多个参数，从而匹配多种模式。</p>
+<p>最后， <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/unsubscribe.html">UNSUBSCRIBE</a> 命令和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/punsubscribe.html">PUNSUBSCRIBE</a> 负责退订给定的频道或模式。</p>
+</div>
+<div class="section" id="id3">
+<h2>发布和订阅机制<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<p>当一个客户端通过 <code class="docutils literal"><span class="pre">PUBLISH</span></code> 命令向订阅者发送信息的时候，我们称这个客户端为发布者（publisher）。</p>
+<p>而当一个客户端使用 <code class="docutils literal"><span class="pre">SUBSCRIBE</span></code> 或者 <code class="docutils literal"><span class="pre">PSUBSCRIBE</span></code> 命令接收信息的时候，我们称这个客户端为订阅者（subscriber）。</p>
+<p>为了解耦发布者（publisher）和订阅者（subscriber）之间的关系，Redis 使用了 channel （频道）作为两者的中介 ——  发布者将信息直接发布给 channel ，而 channel 负责将信息发送给适当的订阅者，发布者和订阅者之间没有相互关系，也不知道对方的存在：</p>
+<img alt="../../_images/pubsub.png" src="../../_images/pubsub.png" />
+<p>知道了发布和订阅的机制之后，接下来就可以开始研究具体的实现了，我们从 Redis 的订阅命令开始说起。</p>
+</div>
+<div class="section" id="id4">
+<h2>SUBSCRIBE 命令的实现<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h2>
+<p>前面说到，Redis 将所有接受和发送信息的任务交给 channel 来进行，而所有 channel 的信息就储存在 <code class="docutils literal"><span class="pre">redisServer</span></code> 这个结构中：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="k">struct</span> <span class="n">redisServer</span> <span class="p">{</span>
+    <span class="c1">// 省略 ...</span>
+    <span class="n">dict</span> <span class="o">*</span><span class="n">pubsub_channels</span><span class="p">;</span>  <span class="c1">// Map channels to list of subscribed clients</span>
+    <span class="c1">// 省略 ...</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">pubsub_channels</span></code> 是一个字典，字典的键就是一个个 channel ，而字典的值则是一个链表，链表中保存了所有订阅这个 channel 的客户端。</p>
+<p>举个例子，如果在一个 <code class="docutils literal"><span class="pre">redisServer</span></code> 实例中，有一个叫做 <code class="docutils literal"><span class="pre">news</span></code> 的频道，这个频道同时被 <code class="docutils literal"><span class="pre">client_123</span></code> 和 <code class="docutils literal"><span class="pre">client_456</span></code> 两个客户端订阅，那么这个 <code class="docutils literal"><span class="pre">redisServer</span></code> 结构看起来应该是这样子：</p>
+<img alt="../../_images/subscribe.png" src="../../_images/subscribe.png" />
+<p>可以看出，实现 <code class="docutils literal"><span class="pre">SUBSCRIBE</span></code> 命令的关键，就是将客户端添加到给定 <code class="docutils literal"><span class="pre">channel</span></code> 的订阅链表中。</p>
+<p>函数 <code class="docutils literal"><span class="pre">pubsubSubscribeChannel</span></code> 是 <code class="docutils literal"><span class="pre">SUBSCRIBE</span></code> 命令的底层实现，它完成了将客户端添加到订阅链表中的工作：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// 订阅指定频道</span>
+<span class="c1">// 订阅成功返回 1 ，如果已经订阅过，返回 0</span>
+<span class="kt">int</span> <span class="nf">pubsubSubscribeChannel</span><span class="p">(</span><span class="n">redisClient</span> <span class="o">*</span><span class="n">c</span><span class="p">,</span> <span class="n">robj</span> <span class="o">*</span><span class="n">channel</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">struct</span> <span class="n">dictEntry</span> <span class="o">*</span><span class="n">de</span><span class="p">;</span>
+    <span class="n">list</span> <span class="o">*</span><span class="n">clients</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">retval</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+    <span class="cm">/* Add the channel to the client -&gt; channels hash table */</span>
+    <span class="c1">// dictAdd 在添加新元素成功时返回 DICT_OK</span>
+    <span class="c1">// 因此这个判断句表示，如果新订阅 channel 成功，那么 。。。</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">dictAdd</span><span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">pubsub_channels</span><span class="p">,</span><span class="n">channel</span><span class="p">,</span><span class="nb">NULL</span><span class="p">)</span> <span class="o">==</span> <span class="n">DICT_OK</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">retval</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+        <span class="n">incrRefCount</span><span class="p">(</span><span class="n">channel</span><span class="p">);</span>
+
+        <span class="cm">/* Add the client to the channel -&gt; list of clients hash table */</span>
+        <span class="c1">// 将 client 添加到订阅给定 channel 的链表中</span>
+        <span class="c1">// 这个链表是一个哈希表的值，哈希表的键是给定 channel</span>
+        <span class="c1">// 这个哈希表保存在 server.pubsub_channels 里</span>
+        <span class="n">de</span> <span class="o">=</span> <span class="n">dictFind</span><span class="p">(</span><span class="n">server</span><span class="p">.</span><span class="n">pubsub_channels</span><span class="p">,</span><span class="n">channel</span><span class="p">);</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">de</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+            <span class="c1">// 如果 de 等于 NULL</span>
+            <span class="c1">// 表示这个客户端是首个订阅这个 channel 的客户端</span>
+            <span class="c1">// 那么创建一个新的列表， 并将它加入到哈希表中</span>
+            <span class="n">clients</span> <span class="o">=</span> <span class="n">listCreate</span><span class="p">();</span>
+            <span class="n">dictAdd</span><span class="p">(</span><span class="n">server</span><span class="p">.</span><span class="n">pubsub_channels</span><span class="p">,</span><span class="n">channel</span><span class="p">,</span><span class="n">clients</span><span class="p">);</span>
+            <span class="n">incrRefCount</span><span class="p">(</span><span class="n">channel</span><span class="p">);</span>
+        <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+            <span class="c1">// 如果 de 不为空，就取出这个 clients 链表</span>
+            <span class="n">clients</span> <span class="o">=</span> <span class="n">dictGetVal</span><span class="p">(</span><span class="n">de</span><span class="p">);</span>
+        <span class="p">}</span>
+        <span class="c1">// 将客户端加入到链表中</span>
+        <span class="n">listAddNodeTail</span><span class="p">(</span><span class="n">clients</span><span class="p">,</span><span class="n">c</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="cm">/* Notify the client */</span>
+    <span class="n">addReply</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">shared</span><span class="p">.</span><span class="n">mbulkhdr</span><span class="p">[</span><span class="mi">3</span><span class="p">]);</span>
+    <span class="n">addReply</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">shared</span><span class="p">.</span><span class="n">subscribebulk</span><span class="p">);</span>
+    <span class="c1">// 返回订阅的频道</span>
+    <span class="n">addReplyBulk</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">channel</span><span class="p">);</span>
+    <span class="c1">// 返回客户端当前已订阅的频道和模式数量的总和</span>
+    <span class="n">addReplyLongLong</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">dictSize</span><span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">pubsub_channels</span><span class="p">)</span><span class="o">+</span><span class="n">listLength</span><span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">pubsub_patterns</span><span class="p">));</span>
+
+    <span class="k">return</span> <span class="n">retval</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id5">
+<h2>PSUBSCRIBE 命令的实现<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h2>
+<p>除了直接订阅给定 channel 外，还可以使用 <code class="docutils literal"><span class="pre">PSUBSCRIBE</span></code> 订阅一个模式（pattern），订阅一个模式等同于订阅所有匹配这个模式的 channel 。</p>
+<p>和 <code class="docutils literal"><span class="pre">redisServer.pubsub_channels</span></code> 属性类似， <code class="docutils literal"><span class="pre">redisServer.pubsub_patterns</span></code> 属性用于保存所有被订阅的模式，和 <code class="docutils literal"><span class="pre">pubsub_channels</span></code> 不同的是， <code class="docutils literal"><span class="pre">pubsub_patterns</span></code> 是一个链表（而不是字典）：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="k">struct</span> <span class="n">redisServer</span> <span class="p">{</span>
+    <span class="c1">// 省略 ...</span>
+    <span class="n">list</span> <span class="o">*</span><span class="n">pubsub_patterns</span><span class="p">;</span>  <span class="c1">// A list of pubsub_patterns</span>
+    <span class="c1">// 省略 ...</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">pubsub_patterns</span></code> 的每一个节点都是一个 <code class="docutils literal"><span class="pre">pubsubPattern</span></code> 结构的实例，它保存了被订阅的模式，以及订阅这个模式的客户客户端：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="k">typedef</span> <span class="k">struct</span> <span class="n">pubsubPattern</span> <span class="p">{</span>
+    <span class="n">redisClient</span> <span class="o">*</span><span class="n">client</span><span class="p">;</span>
+    <span class="n">robj</span> <span class="o">*</span><span class="n">pattern</span><span class="p">;</span>
+<span class="p">}</span> <span class="n">pubsubPattern</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>举个例子，假设在一个 <code class="docutils literal"><span class="pre">redisServer</span></code> 实例中，有一个叫做 <code class="docutils literal"><span class="pre">news.*</span></code> 的模式同时被客户端 <code class="docutils literal"><span class="pre">client_789</span></code> 和 <code class="docutils literal"><span class="pre">client_999</span></code> 订阅，那么这个 <code class="docutils literal"><span class="pre">redisServer</span></code> 结构看起来应该是这样子：</p>
+<img alt="../../_images/psubscribe.png" src="../../_images/psubscribe.png" />
+<p>现在可以知道，实现 <code class="docutils literal"><span class="pre">PSUBSCRIBE</span></code> 命令的关键，就是将客户端和订阅的模式添加到 <code class="docutils literal"><span class="pre">redisServer.pubsub_patterns</span></code> 当中。</p>
+<p><code class="docutils literal"><span class="pre">pubsubSubscribePattern</span></code> 是 <code class="docutils literal"><span class="pre">PSUBSCRIBE</span></code> 的底层实现，它将客户端和所订阅的模式添加到 <code class="docutils literal"><span class="pre">redisServer.pubsub_patterns</span></code> 当中：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// 订阅指定模式</span>
+<span class="c1">// 订阅成功返回 1 ，如果已经订阅过，返回 0</span>
+<span class="kt">int</span> <span class="nf">pubsubSubscribePattern</span><span class="p">(</span><span class="n">redisClient</span> <span class="o">*</span><span class="n">c</span><span class="p">,</span> <span class="n">robj</span> <span class="o">*</span><span class="n">pattern</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">int</span> <span class="n">retval</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+    <span class="c1">// 向 c-&gt;pubsub_patterns 中查找指定 pattern</span>
+    <span class="c1">// 如果返回值为 NULL ，说明这个 pattern 还没被这个客户端订阅过</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">listSearchKey</span><span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">pubsub_patterns</span><span class="p">,</span><span class="n">pattern</span><span class="p">)</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">retval</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+
+        <span class="c1">// 添加 pattern 到客户端 pubsub_patterns</span>
+        <span class="n">listAddNodeTail</span><span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">pubsub_patterns</span><span class="p">,</span><span class="n">pattern</span><span class="p">);</span>
+        <span class="n">incrRefCount</span><span class="p">(</span><span class="n">pattern</span><span class="p">);</span>
+
+        <span class="c1">// 将 pattern 添加到服务器</span>
+        <span class="n">pubsubPattern</span> <span class="o">*</span><span class="n">pat</span><span class="p">;</span>
+        <span class="n">pat</span> <span class="o">=</span> <span class="n">zmalloc</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="o">*</span><span class="n">pat</span><span class="p">));</span>
+        <span class="n">pat</span><span class="o">-&gt;</span><span class="n">pattern</span> <span class="o">=</span> <span class="n">getDecodedObject</span><span class="p">(</span><span class="n">pattern</span><span class="p">);</span>
+        <span class="n">pat</span><span class="o">-&gt;</span><span class="n">client</span> <span class="o">=</span> <span class="n">c</span><span class="p">;</span>
+
+        <span class="n">listAddNodeTail</span><span class="p">(</span><span class="n">server</span><span class="p">.</span><span class="n">pubsub_patterns</span><span class="p">,</span><span class="n">pat</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="cm">/* Notify the client */</span>
+    <span class="n">addReply</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">shared</span><span class="p">.</span><span class="n">mbulkhdr</span><span class="p">[</span><span class="mi">3</span><span class="p">]);</span>
+    <span class="n">addReply</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">shared</span><span class="p">.</span><span class="n">psubscribebulk</span><span class="p">);</span>
+    <span class="c1">// 返回被订阅的模式</span>
+    <span class="n">addReplyBulk</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">pattern</span><span class="p">);</span>
+    <span class="c1">// 返回客户端当前已订阅的频道和模式数量的总和</span>
+    <span class="n">addReplyLongLong</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">dictSize</span><span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">pubsub_channels</span><span class="p">)</span><span class="o">+</span><span class="n">listLength</span><span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">pubsub_patterns</span><span class="p">));</span>
+
+    <span class="k">return</span> <span class="n">retval</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id6">
+<h2>PUBLISH 命令的实现<a class="headerlink" href="#id6" title="Permalink to this headline">¶</a></h2>
+<p>使用 <code class="docutils literal"><span class="pre">PUBLISH</span></code> 命令向订阅者发送消息，需要执行以下两个步骤：</p>
+<ol class="arabic simple">
+<li>使用给定的频道作为键，在 <code class="docutils literal"><span class="pre">redisServer.pubsub_channels</span></code> 字典中查找记录了订阅这个频道的所有客户端的链表，遍历这个链表，将消息发布给所有订阅者。</li>
+<li>遍历 <code class="docutils literal"><span class="pre">redisServer.pubsub_patterns</span></code> 链表，将链表中的模式和给定的频道进行匹配，如果匹配成功，那么将消息发布到相应模式的客户端当中。</li>
+</ol>
+<p>举个例子，假设有两个客户端分别订阅 <code class="docutils literal"><span class="pre">it.news</span></code> 频道和 <code class="docutils literal"><span class="pre">it.*</span></code> 模式，当执行命令 <code class="docutils literal"><span class="pre">PUBLISH</span> <span class="pre">it.news</span> <span class="pre">&quot;hello</span> <span class="pre">moto&quot;</span></code> 的时候， <code class="docutils literal"><span class="pre">it.news</span></code> 频道的订阅者会在步骤 1 收到信息，而当 <code class="docutils literal"><span class="pre">PUBLISH</span></code> 进行到步骤 2 的时候， <code class="docutils literal"><span class="pre">it.*</span></code> 模式的订阅者也会收到信息。</p>
+<p><code class="docutils literal"><span class="pre">PUBLISH</span></code> 命令的实际实现由 <code class="docutils literal"><span class="pre">pubsubPublishMessage</span></code> 函数完成，它的完整定义如下：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// 发送消息</span>
+<span class="kt">int</span> <span class="nf">pubsubPublishMessage</span><span class="p">(</span><span class="n">robj</span> <span class="o">*</span><span class="n">channel</span><span class="p">,</span> <span class="n">robj</span> <span class="o">*</span><span class="n">message</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">int</span> <span class="n">receivers</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="k">struct</span> <span class="n">dictEntry</span> <span class="o">*</span><span class="n">de</span><span class="p">;</span>
+    <span class="n">listNode</span> <span class="o">*</span><span class="n">ln</span><span class="p">;</span>
+    <span class="n">listIter</span> <span class="n">li</span><span class="p">;</span>
+
+    <span class="cm">/* Send to clients listening for that channel */</span>
+    <span class="c1">// 向所有频道的订阅者发送消息</span>
+    <span class="n">de</span> <span class="o">=</span> <span class="n">dictFind</span><span class="p">(</span><span class="n">server</span><span class="p">.</span><span class="n">pubsub_channels</span><span class="p">,</span><span class="n">channel</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">de</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">list</span> <span class="o">*</span><span class="n">list</span> <span class="o">=</span> <span class="n">dictGetVal</span><span class="p">(</span><span class="n">de</span><span class="p">);</span>    <span class="c1">// 取出所有订阅者</span>
+        <span class="n">listNode</span> <span class="o">*</span><span class="n">ln</span><span class="p">;</span>
+        <span class="n">listIter</span> <span class="n">li</span><span class="p">;</span>
+
+        <span class="c1">// 遍历所有订阅者， 向它们发送消息</span>
+        <span class="n">listRewind</span><span class="p">(</span><span class="n">list</span><span class="p">,</span><span class="o">&amp;</span><span class="n">li</span><span class="p">);</span>
+        <span class="k">while</span> <span class="p">((</span><span class="n">ln</span> <span class="o">=</span> <span class="n">listNext</span><span class="p">(</span><span class="o">&amp;</span><span class="n">li</span><span class="p">))</span> <span class="o">!=</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">redisClient</span> <span class="o">*</span><span class="n">c</span> <span class="o">=</span> <span class="n">ln</span><span class="o">-&gt;</span><span class="n">value</span><span class="p">;</span>
+
+            <span class="n">addReply</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">shared</span><span class="p">.</span><span class="n">mbulkhdr</span><span class="p">[</span><span class="mi">3</span><span class="p">]);</span>
+            <span class="n">addReply</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">shared</span><span class="p">.</span><span class="n">messagebulk</span><span class="p">);</span>
+            <span class="n">addReplyBulk</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">channel</span><span class="p">);</span>    <span class="c1">// 打印频道名</span>
+            <span class="n">addReplyBulk</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">message</span><span class="p">);</span>    <span class="c1">// 打印消息</span>
+            <span class="n">receivers</span><span class="o">++</span><span class="p">;</span>    <span class="c1">// 更新接收者数量</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+    <span class="cm">/* Send to clients listening to matching channels */</span>
+    <span class="c1">// 向所有被匹配模式的订阅者发送消息</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">listLength</span><span class="p">(</span><span class="n">server</span><span class="p">.</span><span class="n">pubsub_patterns</span><span class="p">))</span> <span class="p">{</span>
+        <span class="n">listRewind</span><span class="p">(</span><span class="n">server</span><span class="p">.</span><span class="n">pubsub_patterns</span><span class="p">,</span><span class="o">&amp;</span><span class="n">li</span><span class="p">);</span> <span class="c1">// 取出所有模式</span>
+        <span class="n">channel</span> <span class="o">=</span> <span class="n">getDecodedObject</span><span class="p">(</span><span class="n">channel</span><span class="p">);</span>
+        <span class="k">while</span> <span class="p">((</span><span class="n">ln</span> <span class="o">=</span> <span class="n">listNext</span><span class="p">(</span><span class="o">&amp;</span><span class="n">li</span><span class="p">))</span> <span class="o">!=</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">pubsubPattern</span> <span class="o">*</span><span class="n">pat</span> <span class="o">=</span> <span class="n">ln</span><span class="o">-&gt;</span><span class="n">value</span><span class="p">;</span> <span class="c1">// 取出模式</span>
+
+            <span class="c1">// 如果模式和 channel 匹配的话</span>
+            <span class="c1">// 向这个模式的订阅者发送消息</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">stringmatchlen</span><span class="p">((</span><span class="kt">char</span><span class="o">*</span><span class="p">)</span><span class="n">pat</span><span class="o">-&gt;</span><span class="n">pattern</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">,</span>
+                                <span class="n">sdslen</span><span class="p">(</span><span class="n">pat</span><span class="o">-&gt;</span><span class="n">pattern</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">),</span>
+                                <span class="p">(</span><span class="kt">char</span><span class="o">*</span><span class="p">)</span><span class="n">channel</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">,</span>
+                                <span class="n">sdslen</span><span class="p">(</span><span class="n">channel</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">),</span><span class="mi">0</span><span class="p">))</span> <span class="p">{</span>
+                <span class="n">addReply</span><span class="p">(</span><span class="n">pat</span><span class="o">-&gt;</span><span class="n">client</span><span class="p">,</span><span class="n">shared</span><span class="p">.</span><span class="n">mbulkhdr</span><span class="p">[</span><span class="mi">4</span><span class="p">]);</span>
+                <span class="n">addReply</span><span class="p">(</span><span class="n">pat</span><span class="o">-&gt;</span><span class="n">client</span><span class="p">,</span><span class="n">shared</span><span class="p">.</span><span class="n">pmessagebulk</span><span class="p">);</span>
+                <span class="n">addReplyBulk</span><span class="p">(</span><span class="n">pat</span><span class="o">-&gt;</span><span class="n">client</span><span class="p">,</span><span class="n">pat</span><span class="o">-&gt;</span><span class="n">pattern</span><span class="p">);</span> <span class="c1">// 打印被匹配的模式</span>
+                <span class="n">addReplyBulk</span><span class="p">(</span><span class="n">pat</span><span class="o">-&gt;</span><span class="n">client</span><span class="p">,</span><span class="n">channel</span><span class="p">);</span>      <span class="c1">// 打印频道名</span>
+                <span class="n">addReplyBulk</span><span class="p">(</span><span class="n">pat</span><span class="o">-&gt;</span><span class="n">client</span><span class="p">,</span><span class="n">message</span><span class="p">);</span>      <span class="c1">// 打印消息</span>
+                <span class="n">receivers</span><span class="o">++</span><span class="p">;</span>    <span class="c1">// 更新接收者数量</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+        <span class="n">decrRefCount</span><span class="p">(</span><span class="n">channel</span><span class="p">);</span>  <span class="c1">// 释放用过的 channel</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">receivers</span><span class="p">;</span>   <span class="c1">// 返回接收者数量</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="unsubscribe-punsubscribe">
+<h2>UNSUBSCRIBE 和 PUNSUBSCRIBE 的实现<a class="headerlink" href="#unsubscribe-punsubscribe" title="Permalink to this headline">¶</a></h2>
+<p><code class="docutils literal"><span class="pre">UNSUBSCRIBE</span></code> 和 <code class="docutils literal"><span class="pre">PUNSUBSCRIBE</span></code> 分别是 <code class="docutils literal"><span class="pre">SUBSCRIBE</span></code> 和 <code class="docutils literal"><span class="pre">PSUBSCRIBE</span></code> 的反操作，如果明白了 <code class="docutils literal"><span class="pre">SUBSCRIBE</span></code> 和 <code class="docutils literal"><span class="pre">PSUBSCRIBE</span></code> 的工作机制的话，应该不难理解这两个反操作的原理，所以这里就省略详细的分析了，有兴趣的可以直接看代码。</p>
+</div>
+<div class="section" id="id7">
+<h2>小节<a class="headerlink" href="#id7" title="Permalink to this headline">¶</a></h2>
+<p>Redis 的 pubsub 机制的分析就到此结束了，跟往常一样，带有注释的完整 <code class="docutils literal"><span class="pre">pubsub.c</span></code> 文件可以到我的 GITHUB 上找： <a class="reference external" href="https://github.com/huangz1990/reading_redis_source">https://github.com/huangz1990/reading_redis_source</a> 。</p>
+<p>Have fun 。</p>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">发布/订阅</a><ul>
+<li><a class="reference internal" href="#id2">订阅、发布和退订</a></li>
+<li><a class="reference internal" href="#id3">发布和订阅机制</a></li>
+<li><a class="reference internal" href="#id4">SUBSCRIBE 命令的实现</a></li>
+<li><a class="reference internal" href="#id5">PSUBSCRIBE 命令的实现</a></li>
+<li><a class="reference internal" href="#id6">PUBLISH 命令的实现</a></li>
+<li><a class="reference internal" href="#unsubscribe-punsubscribe">UNSUBSCRIBE 和 PUNSUBSCRIBE 的实现</a></li>
+<li><a class="reference internal" href="#id7">小节</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="event-driven.html"
+                        title="previous chapter">事件驱动</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="transaction.html"
+                        title="next chapter">事务</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

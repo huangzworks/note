@@ -1,0 +1,529 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>键空间通知 &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="up" title="Redis 源码分析" href="index.html" />
+    <link rel="next" title="PUBSUB 命令" href="pubsub_command.html" />
+    <link rel="prev" title="WATCH 和 UNWATCH" href="watch-and-unwatch.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="pubsub_command.html" title="PUBSUB 命令"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="watch-and-unwatch.html" title="WATCH 和 UNWATCH"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Redis 源码分析</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>键空间通知<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<p>键空间通知（keyspace notification）是仍在开发的 Redis 2.8 版本的新功能，
+本文将对该功能的底层实现进行介绍。</p>
+<p>本文假定你已经了解如何使用键空间通知功能，
+如果你不具备这一前提条件，
+请在阅读本文前先阅读 <a class="reference external" href="http://redis.readthedocs.org/en/latest/topic/notification.html">键空间通知的文档</a> 。</p>
+<div class="section" id="id3">
+<h2>选择通知的类型<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<p>通过对服务器的 <code class="docutils literal"><span class="pre">notify-keyspace-events</span></code> 选项进行修改，
+用户可以选择开启或关闭键空间通知功能，
+或者只接收特定类型的通知。</p>
+<ul class="simple">
+<li>比如说，如果执行 <code class="docutils literal"><span class="pre">CONFIG</span> <span class="pre">SET</span> <span class="pre">notify-keyspace-events</span> <span class="pre">Kh</span></code> ，那么服务器将只发送和哈希类型有关的键空间通知。</li>
+<li>又比如，如果执行 <code class="docutils literal"><span class="pre">CONFIG</span> <span class="pre">SET</span> <span class="pre">notify-keyspace-events</span> <span class="pre">KElsh</span></code> 命令的话，那么服务器将发送所有和列表、集合、哈希相关的键空间通知和键事件通知。</li>
+</ul>
+<p>在通过 <code class="docutils literal"><span class="pre">CONFIG</span> <span class="pre">SET</span></code> 命令设置 <code class="docutils literal"><span class="pre">notify-keyspace-events</span></code> 选项的参数时，
+<code class="docutils literal"><span class="pre">notify.c/keyspaceEventsStringToFlags</span></code> 函数会对传入的字符串参数进行分析，
+给出相应的 <code class="docutils literal"><span class="pre">flags</span></code> 值，
+并将它赋值给服务器状态 <code class="docutils literal"><span class="pre">server.notify_keyspace_events</span></code> 属性：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="kt">void</span> <span class="nf">configSetCommand</span><span class="p">(</span><span class="n">redisClient</span> <span class="o">*</span><span class="n">c</span><span class="p">)</span> <span class="p">{</span>
+
+<span class="c1">// ...</span>
+
+<span class="p">}</span> <span class="k">else</span> <span class="nf">if</span> <span class="p">(</span><span class="o">!</span><span class="n">strcasecmp</span><span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">,</span><span class="s">&quot;notify-keyspace-events&quot;</span><span class="p">))</span> <span class="p">{</span>
+
+    <span class="c1">// 根据字符串参数，计算 flags 的值</span>
+    <span class="kt">int</span> <span class="n">flags</span> <span class="o">=</span> <span class="n">keyspaceEventsStringToFlags</span><span class="p">(</span><span class="n">o</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">);</span>
+
+    <span class="c1">// 传入的字符串带有不能识别的字符，出错</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">flags</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="k">goto</span> <span class="n">badfmt</span><span class="p">;</span>
+
+    <span class="c1">// 设置属性</span>
+    <span class="n">server</span><span class="p">.</span><span class="n">notify_keyspace_events</span> <span class="o">=</span> <span class="n">flags</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// ...</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">keyspaceEventsStringToFlags</span></code> 函数位于 <code class="docutils literal"><span class="pre">notify.c</span></code> 文件中，
+它的完整定义如下：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cm">/* Turn a string representing notification classes into an integer</span>
+<span class="cm"> * representing notification classes flags xored.</span>
+<span class="cm"> *</span>
+<span class="cm"> * The function returns -1 if the input contains characters not mapping to</span>
+<span class="cm"> * any class. */</span>
+<span class="kt">int</span> <span class="nf">keyspaceEventsStringToFlags</span><span class="p">(</span><span class="kt">char</span> <span class="o">*</span><span class="n">classes</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">char</span> <span class="o">*</span><span class="n">p</span> <span class="o">=</span> <span class="n">classes</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">c</span><span class="p">,</span> <span class="n">flags</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+    <span class="k">while</span><span class="p">((</span><span class="n">c</span> <span class="o">=</span> <span class="o">*</span><span class="n">p</span><span class="o">++</span><span class="p">)</span> <span class="o">!=</span> <span class="sc">&#39;\0&#39;</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">switch</span><span class="p">(</span><span class="n">c</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">case</span> <span class="sc">&#39;A&#39;</span><span class="o">:</span> <span class="n">flags</span> <span class="o">|=</span> <span class="n">REDIS_NOTIFY_ALL</span><span class="p">;</span> <span class="k">break</span><span class="p">;</span>
+        <span class="k">case</span> <span class="sc">&#39;g&#39;</span><span class="o">:</span> <span class="n">flags</span> <span class="o">|=</span> <span class="n">REDIS_NOTIFY_GENERIC</span><span class="p">;</span> <span class="k">break</span><span class="p">;</span>
+        <span class="k">case</span> <span class="sc">&#39;$&#39;</span><span class="o">:</span> <span class="n">flags</span> <span class="o">|=</span> <span class="n">REDIS_NOTIFY_STRING</span><span class="p">;</span> <span class="k">break</span><span class="p">;</span>
+        <span class="k">case</span> <span class="sc">&#39;l&#39;</span><span class="o">:</span> <span class="n">flags</span> <span class="o">|=</span> <span class="n">REDIS_NOTIFY_LIST</span><span class="p">;</span> <span class="k">break</span><span class="p">;</span>
+        <span class="k">case</span> <span class="sc">&#39;s&#39;</span><span class="o">:</span> <span class="n">flags</span> <span class="o">|=</span> <span class="n">REDIS_NOTIFY_SET</span><span class="p">;</span> <span class="k">break</span><span class="p">;</span>
+        <span class="k">case</span> <span class="sc">&#39;h&#39;</span><span class="o">:</span> <span class="n">flags</span> <span class="o">|=</span> <span class="n">REDIS_NOTIFY_HASH</span><span class="p">;</span> <span class="k">break</span><span class="p">;</span>
+        <span class="k">case</span> <span class="sc">&#39;z&#39;</span><span class="o">:</span> <span class="n">flags</span> <span class="o">|=</span> <span class="n">REDIS_NOTIFY_ZSET</span><span class="p">;</span> <span class="k">break</span><span class="p">;</span>
+        <span class="k">case</span> <span class="sc">&#39;x&#39;</span><span class="o">:</span> <span class="n">flags</span> <span class="o">|=</span> <span class="n">REDIS_NOTIFY_EXPIRED</span><span class="p">;</span> <span class="k">break</span><span class="p">;</span>
+        <span class="k">case</span> <span class="sc">&#39;e&#39;</span><span class="o">:</span> <span class="n">flags</span> <span class="o">|=</span> <span class="n">REDIS_NOTIFY_EVICTED</span><span class="p">;</span> <span class="k">break</span><span class="p">;</span>
+        <span class="k">case</span> <span class="sc">&#39;K&#39;</span><span class="o">:</span> <span class="n">flags</span> <span class="o">|=</span> <span class="n">REDIS_NOTIFY_KEYSPACE</span><span class="p">;</span> <span class="k">break</span><span class="p">;</span>
+        <span class="k">case</span> <span class="sc">&#39;E&#39;</span><span class="o">:</span> <span class="n">flags</span> <span class="o">|=</span> <span class="n">REDIS_NOTIFY_KEYEVENT</span><span class="p">;</span> <span class="k">break</span><span class="p">;</span>
+        <span class="k">default</span><span class="o">:</span> <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">flags</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">notify.c</span></code> 中还定义了一个和 <code class="docutils literal"><span class="pre">keyspaceEventsStringToFlags</span></code> 相反的函数 —— <code class="docutils literal"><span class="pre">keyspaceEventsFlagsToString</span></code> ，
+这个函数可以根据 <code class="docutils literal"><span class="pre">flags</span></code> 值还原设置这个 <code class="docutils literal"><span class="pre">flags</span></code> 所需的字符串。</p>
+<p>当调用 <code class="docutils literal"><span class="pre">CONFIG</span> <span class="pre">GET</span></code> 命令取出选项的值时，
+Reids 就会将当前的 <code class="docutils literal"><span class="pre">server.notify_keyspace_events</span></code> 的值传给这个函数，
+让它将 <code class="docutils literal"><span class="pre">flags</span></code> 的字符串表示返回给用户：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">redis</span> <span class="mf">127.0.0.1</span><span class="o">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">CONFIG</span> <span class="n">SET</span> <span class="n">notify</span><span class="o">-</span><span class="n">keyspace</span><span class="o">-</span><span class="n">events</span> <span class="n">Kh</span>
+<span class="n">OK</span>
+
+<span class="n">redis</span> <span class="mf">127.0.0.1</span><span class="o">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">CONFIG</span> <span class="n">GET</span> <span class="n">notify</span><span class="o">-</span><span class="n">keyspace</span><span class="o">-</span><span class="n">events</span>
+<span class="mi">1</span><span class="p">)</span> <span class="s">&quot;notify-keyspace-events&quot;</span>
+<span class="mi">2</span><span class="p">)</span> <span class="s">&quot;hK&quot;</span>
+
+<span class="n">redis</span> <span class="mf">127.0.0.1</span><span class="o">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">CONFIG</span> <span class="n">SET</span> <span class="n">notify</span><span class="o">-</span><span class="n">keyspace</span><span class="o">-</span><span class="n">events</span> <span class="n">KElsh</span>
+<span class="n">OK</span>
+
+<span class="n">redis</span> <span class="mf">127.0.0.1</span><span class="o">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">CONFIG</span> <span class="n">GET</span> <span class="n">notify</span><span class="o">-</span><span class="n">keyspace</span><span class="o">-</span><span class="n">events</span>
+<span class="mi">1</span><span class="p">)</span> <span class="s">&quot;notify-keyspace-events&quot;</span>
+<span class="mi">2</span><span class="p">)</span> <span class="s">&quot;lshKE&quot;</span>
+</pre></div>
+</div>
+<p>以下是 <code class="docutils literal"><span class="pre">keyspaceEventsFlagsToString</span></code> 函数的完整定义（同样为于 <code class="docutils literal"><span class="pre">notify.c</span></code> 中）：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cm">/* This function does exactly the revese of the function above: it gets</span>
+<span class="cm"> * as input an integer with the xored flags and returns a string representing</span>
+<span class="cm"> * the selected classes. The string returned is an sds string that needs to</span>
+<span class="cm"> * be released with sdsfree(). */</span>
+<span class="n">sds</span> <span class="nf">keyspaceEventsFlagsToString</span><span class="p">(</span><span class="kt">int</span> <span class="n">flags</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">sds</span> <span class="n">res</span><span class="p">;</span>
+
+    <span class="k">if</span> <span class="p">((</span><span class="n">flags</span> <span class="o">&amp;</span> <span class="n">REDIS_NOTIFY_ALL</span><span class="p">)</span> <span class="o">==</span> <span class="n">REDIS_NOTIFY_ALL</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">sdsnew</span><span class="p">(</span><span class="s">&quot;A&quot;</span><span class="p">);</span>
+    <span class="n">res</span> <span class="o">=</span> <span class="n">sdsempty</span><span class="p">();</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">flags</span> <span class="o">&amp;</span> <span class="n">REDIS_NOTIFY_GENERIC</span><span class="p">)</span> <span class="n">res</span> <span class="o">=</span> <span class="n">sdscatlen</span><span class="p">(</span><span class="n">res</span><span class="p">,</span><span class="s">&quot;g&quot;</span><span class="p">,</span><span class="mi">1</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">flags</span> <span class="o">&amp;</span> <span class="n">REDIS_NOTIFY_STRING</span><span class="p">)</span> <span class="n">res</span> <span class="o">=</span> <span class="n">sdscatlen</span><span class="p">(</span><span class="n">res</span><span class="p">,</span><span class="s">&quot;$&quot;</span><span class="p">,</span><span class="mi">1</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">flags</span> <span class="o">&amp;</span> <span class="n">REDIS_NOTIFY_LIST</span><span class="p">)</span> <span class="n">res</span> <span class="o">=</span> <span class="n">sdscatlen</span><span class="p">(</span><span class="n">res</span><span class="p">,</span><span class="s">&quot;l&quot;</span><span class="p">,</span><span class="mi">1</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">flags</span> <span class="o">&amp;</span> <span class="n">REDIS_NOTIFY_SET</span><span class="p">)</span> <span class="n">res</span> <span class="o">=</span> <span class="n">sdscatlen</span><span class="p">(</span><span class="n">res</span><span class="p">,</span><span class="s">&quot;s&quot;</span><span class="p">,</span><span class="mi">1</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">flags</span> <span class="o">&amp;</span> <span class="n">REDIS_NOTIFY_HASH</span><span class="p">)</span> <span class="n">res</span> <span class="o">=</span> <span class="n">sdscatlen</span><span class="p">(</span><span class="n">res</span><span class="p">,</span><span class="s">&quot;h&quot;</span><span class="p">,</span><span class="mi">1</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">flags</span> <span class="o">&amp;</span> <span class="n">REDIS_NOTIFY_ZSET</span><span class="p">)</span> <span class="n">res</span> <span class="o">=</span> <span class="n">sdscatlen</span><span class="p">(</span><span class="n">res</span><span class="p">,</span><span class="s">&quot;z&quot;</span><span class="p">,</span><span class="mi">1</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">flags</span> <span class="o">&amp;</span> <span class="n">REDIS_NOTIFY_EXPIRED</span><span class="p">)</span> <span class="n">res</span> <span class="o">=</span> <span class="n">sdscatlen</span><span class="p">(</span><span class="n">res</span><span class="p">,</span><span class="s">&quot;x&quot;</span><span class="p">,</span><span class="mi">1</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">flags</span> <span class="o">&amp;</span> <span class="n">REDIS_NOTIFY_EVICTED</span><span class="p">)</span> <span class="n">res</span> <span class="o">=</span> <span class="n">sdscatlen</span><span class="p">(</span><span class="n">res</span><span class="p">,</span><span class="s">&quot;e&quot;</span><span class="p">,</span><span class="mi">1</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">flags</span> <span class="o">&amp;</span> <span class="n">REDIS_NOTIFY_KEYSPACE</span><span class="p">)</span> <span class="n">res</span> <span class="o">=</span> <span class="n">sdscatlen</span><span class="p">(</span><span class="n">res</span><span class="p">,</span><span class="s">&quot;K&quot;</span><span class="p">,</span><span class="mi">1</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">flags</span> <span class="o">&amp;</span> <span class="n">REDIS_NOTIFY_KEYEVENT</span><span class="p">)</span> <span class="n">res</span> <span class="o">=</span> <span class="n">sdscatlen</span><span class="p">(</span><span class="n">res</span><span class="p">,</span><span class="s">&quot;E&quot;</span><span class="p">,</span><span class="mi">1</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">res</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id4">
+<h2>通知的发送<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h2>
+<p>Redis 中每个对键进行了修改的命令，
+都会命令的实现函数中调用 <code class="docutils literal"><span class="pre">notify.c/notifyKeyspaceEvent</span></code> 函数，
+从而发送命令自己特有的通知。</p>
+<p>比如说，
+实现 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/set.html">SET</a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/setnx.html">SETNX</a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/setex.html">SETEX</a> 等命令的 <code class="docutils literal"><span class="pre">t_string.c/setGenericCommand</span></code> 函数就会在程序的末尾发送 <code class="docutils literal"><span class="pre">&quot;set&quot;</span></code> 通知，
+如果命令执行的是 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/setex.html">SETEX</a> 命令的话，
+那么除了 <code class="docutils literal"><span class="pre">&quot;set&quot;</span></code> 通知之外，
+程序还需要发送 <code class="docutils literal"><span class="pre">&quot;expire&quot;</span></code> 通知：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="kt">void</span> <span class="nf">setGenericCommand</span><span class="p">(</span>
+    <span class="n">redisClient</span> <span class="o">*</span><span class="n">c</span><span class="p">,</span>
+    <span class="kt">int</span> <span class="n">flags</span><span class="p">,</span>
+    <span class="n">robj</span> <span class="o">*</span><span class="n">key</span><span class="p">,</span>
+    <span class="n">robj</span> <span class="o">*</span><span class="n">val</span><span class="p">,</span>
+    <span class="n">robj</span> <span class="o">*</span><span class="n">expire</span><span class="p">,</span>
+    <span class="kt">int</span> <span class="n">unit</span><span class="p">,</span>
+    <span class="n">robj</span> <span class="o">*</span><span class="n">ok_reply</span><span class="p">,</span>
+    <span class="n">robj</span> <span class="o">*</span><span class="n">abort_reply</span>
+<span class="p">)</span> <span class="p">{</span>
+
+    <span class="c1">// ...</span>
+
+    <span class="c1">// 发送设置事件通知</span>
+    <span class="n">notifyKeyspaceEvent</span><span class="p">(</span><span class="n">REDIS_NOTIFY_STRING</span><span class="p">,</span><span class="s">&quot;set&quot;</span><span class="p">,</span><span class="n">key</span><span class="p">,</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">db</span><span class="o">-&gt;</span><span class="n">id</span><span class="p">);</span>
+
+    <span class="c1">// 如果执行的是 SETEX ，那么还需要发送过期时间设置通知</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">expire</span><span class="p">)</span> <span class="n">notifyKeyspaceEvent</span><span class="p">(</span><span class="n">REDIS_NOTIFY_GENERIC</span><span class="p">,</span>
+        <span class="s">&quot;expire&quot;</span><span class="p">,</span><span class="n">key</span><span class="p">,</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">db</span><span class="o">-&gt;</span><span class="n">id</span><span class="p">);</span>
+
+    <span class="c1">// ...</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>又比如，
+实现 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sadd.html">SADD</a> 命令的 <code class="docutils literal"><span class="pre">t_set.c/saddCommand</span></code> 函数，
+就会在至少有一个元素被成功添加到集合时，
+发送 <code class="docutils literal"><span class="pre">&quot;sadd&quot;</span></code> 通知：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="kt">void</span> <span class="nf">saddCommand</span><span class="p">(</span><span class="n">redisClient</span> <span class="o">*</span><span class="n">c</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="c1">// ...</span>
+
+    <span class="c1">// 如果有至少一个元素被成功添加，那么执行以下程序</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">added</span><span class="p">)</span> <span class="p">{</span>
+
+        <span class="c1">// ...</span>
+
+        <span class="c1">// 发送添加元素通知</span>
+        <span class="n">notifyKeyspaceEvent</span><span class="p">(</span><span class="n">REDIS_NOTIFY_SET</span><span class="p">,</span><span class="s">&quot;sadd&quot;</span><span class="p">,</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">db</span><span class="o">-&gt;</span><span class="n">id</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="c1">// ...</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>尽管不同命令发送的通知可能各不相同，
+但是这些通知都是由 <code class="docutils literal"><span class="pre">notifyKeyspaceEvent</span></code> 函数发送的，
+这个函数的完整定义如下：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cm">/* The API provided to the rest of the Redis core is a simple function:</span>
+<span class="cm"> *</span>
+<span class="cm"> * notifyKeyspaceEvent(char *event, robj *key, int dbid);</span>
+<span class="cm"> *</span>
+<span class="cm"> * &#39;event&#39; is a C string representing the event name.</span>
+<span class="cm"> *</span>
+<span class="cm"> * event 参数是一个字符串表示的事件名</span>
+<span class="cm"> *</span>
+<span class="cm"> * &#39;key&#39; is a Redis object representing the key name.</span>
+<span class="cm"> *</span>
+<span class="cm"> * key 参数是一个 Redis 对象表示的键名</span>
+<span class="cm"> *</span>
+<span class="cm"> * &#39;dbid&#39; is the database ID where the key lives.</span>
+<span class="cm"> *</span>
+<span class="cm"> * dbid 参数为键所在的数据库</span>
+<span class="cm"> */</span>
+<span class="kt">void</span> <span class="nf">notifyKeyspaceEvent</span><span class="p">(</span><span class="kt">int</span> <span class="n">type</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">event</span><span class="p">,</span> <span class="n">robj</span> <span class="o">*</span><span class="n">key</span><span class="p">,</span> <span class="kt">int</span> <span class="n">dbid</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">sds</span> <span class="n">chan</span><span class="p">;</span>
+    <span class="n">robj</span> <span class="o">*</span><span class="n">chanobj</span><span class="p">,</span> <span class="o">*</span><span class="n">eventobj</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">len</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+    <span class="kt">char</span> <span class="n">buf</span><span class="p">[</span><span class="mi">24</span><span class="p">];</span>
+
+    <span class="cm">/* If notifications for this class of events are off, return ASAP. */</span>
+    <span class="c1">// 如果服务器配置为不发送 type 类型的通知，那么直接返回</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="n">server</span><span class="p">.</span><span class="n">notify_keyspace_events</span> <span class="o">&amp;</span> <span class="n">type</span><span class="p">))</span> <span class="k">return</span><span class="p">;</span>
+
+    <span class="c1">// 事件的名字</span>
+    <span class="n">eventobj</span> <span class="o">=</span> <span class="n">createStringObject</span><span class="p">(</span><span class="n">event</span><span class="p">,</span><span class="n">strlen</span><span class="p">(</span><span class="n">event</span><span class="p">));</span>
+
+    <span class="cm">/* __keyspace@&lt;db&gt;__:&lt;key&gt; &lt;event&gt; notifications. */</span>
+    <span class="c1">// 发送键空间通知</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">server</span><span class="p">.</span><span class="n">notify_keyspace_events</span> <span class="o">&amp;</span> <span class="n">REDIS_NOTIFY_KEYSPACE</span><span class="p">)</span> <span class="p">{</span>
+
+        <span class="c1">// 构建频道对象</span>
+        <span class="n">chan</span> <span class="o">=</span> <span class="n">sdsnewlen</span><span class="p">(</span><span class="s">&quot;__keyspace@&quot;</span><span class="p">,</span><span class="mi">11</span><span class="p">);</span>
+        <span class="n">len</span> <span class="o">=</span> <span class="n">ll2string</span><span class="p">(</span><span class="n">buf</span><span class="p">,</span><span class="k">sizeof</span><span class="p">(</span><span class="n">buf</span><span class="p">),</span><span class="n">dbid</span><span class="p">);</span>
+        <span class="n">chan</span> <span class="o">=</span> <span class="n">sdscatlen</span><span class="p">(</span><span class="n">chan</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">len</span><span class="p">);</span>
+        <span class="n">chan</span> <span class="o">=</span> <span class="n">sdscatlen</span><span class="p">(</span><span class="n">chan</span><span class="p">,</span> <span class="s">&quot;__:&quot;</span><span class="p">,</span> <span class="mi">3</span><span class="p">);</span>
+        <span class="n">chan</span> <span class="o">=</span> <span class="n">sdscatsds</span><span class="p">(</span><span class="n">chan</span><span class="p">,</span> <span class="n">key</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">);</span>
+
+        <span class="n">chanobj</span> <span class="o">=</span> <span class="n">createObject</span><span class="p">(</span><span class="n">REDIS_STRING</span><span class="p">,</span> <span class="n">chan</span><span class="p">);</span>
+
+        <span class="c1">// 通过 publish 命令发送通知</span>
+        <span class="n">pubsubPublishMessage</span><span class="p">(</span><span class="n">chanobj</span><span class="p">,</span> <span class="n">eventobj</span><span class="p">);</span>
+
+        <span class="c1">// 释放频道对象</span>
+        <span class="n">decrRefCount</span><span class="p">(</span><span class="n">chanobj</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="cm">/* __keyevente@&lt;db&gt;__:&lt;event&gt; &lt;key&gt; notifications. */</span>
+    <span class="c1">// 发送键事件通知</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">server</span><span class="p">.</span><span class="n">notify_keyspace_events</span> <span class="o">&amp;</span> <span class="n">REDIS_NOTIFY_KEYEVENT</span><span class="p">)</span> <span class="p">{</span>
+
+        <span class="c1">// 构建频道对象</span>
+        <span class="n">chan</span> <span class="o">=</span> <span class="n">sdsnewlen</span><span class="p">(</span><span class="s">&quot;__keyevent@&quot;</span><span class="p">,</span><span class="mi">11</span><span class="p">);</span>
+        <span class="c1">// 如果在前面发送键空间通知的时候计算了 len ，那么它就不会是 -1</span>
+        <span class="c1">// 这可以避免计算两次 buf 的长度</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">len</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="n">len</span> <span class="o">=</span> <span class="n">ll2string</span><span class="p">(</span><span class="n">buf</span><span class="p">,</span><span class="k">sizeof</span><span class="p">(</span><span class="n">buf</span><span class="p">),</span><span class="n">dbid</span><span class="p">);</span>
+        <span class="n">chan</span> <span class="o">=</span> <span class="n">sdscatlen</span><span class="p">(</span><span class="n">chan</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">len</span><span class="p">);</span>
+        <span class="n">chan</span> <span class="o">=</span> <span class="n">sdscatlen</span><span class="p">(</span><span class="n">chan</span><span class="p">,</span> <span class="s">&quot;__:&quot;</span><span class="p">,</span> <span class="mi">3</span><span class="p">);</span>
+        <span class="n">chan</span> <span class="o">=</span> <span class="n">sdscatsds</span><span class="p">(</span><span class="n">chan</span><span class="p">,</span> <span class="n">eventobj</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">);</span>
+
+        <span class="n">chanobj</span> <span class="o">=</span> <span class="n">createObject</span><span class="p">(</span><span class="n">REDIS_STRING</span><span class="p">,</span> <span class="n">chan</span><span class="p">);</span>
+
+        <span class="c1">// 通过 publish 命令发送通知</span>
+        <span class="n">pubsubPublishMessage</span><span class="p">(</span><span class="n">chanobj</span><span class="p">,</span> <span class="n">key</span><span class="p">);</span>
+
+        <span class="c1">// 释放频道对象</span>
+        <span class="n">decrRefCount</span><span class="p">(</span><span class="n">chanobj</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="c1">// 释放事件对象</span>
+    <span class="n">decrRefCount</span><span class="p">(</span><span class="n">eventobj</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">notifyKeyspaceEvent</span></code> 函数执行以下步骤：</p>
+<ol class="arabic simple">
+<li>根据 <code class="docutils literal"><span class="pre">server.notify_keyspace_events</span></code> 的值，决定应该发送那些通知。</li>
+<li>构建通知的频道，以及通知的内容（事件）。</li>
+<li>通过 <code class="docutils literal"><span class="pre">pubsubPublishMessage</span></code> 函数，将事件从频道中发送出去。</li>
+</ol>
+<p><code class="docutils literal"><span class="pre">pubsubPublishMessage</span></code> 函数是 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/publish.html">PUBLISH</a> 命令的实现函数，
+调用它相当于调用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/publish.html">PUBLISH</a> 命令。</p>
+<p>当通知被 <code class="docutils literal"><span class="pre">pubsubPublishMessage</span></code> 函数发送出去之后，
+之后的处理就交给订阅与发布模块来处理了，
+<code class="docutils literal"><span class="pre">notifyKeyspaceEvent</span></code> 的使命就此完成。</p>
+</div>
+<div class="section" id="id7">
+<h2>实例<a class="headerlink" href="#id7" title="Permalink to this headline">¶</a></h2>
+<p>文章上一节对键空间事件的底层实现进行了介绍，
+为了更透彻地理解键空间事件的具体运作方式，
+让我们来看一个实际的例子。</p>
+<p>首先，
+启动 Redis 服务器，
+将服务器的 <code class="docutils literal"><span class="pre">notify-keyspace-events</span></code> 选项的参数设置为 <code class="docutils literal"><span class="pre">Es</span></code> ，
+让服务器只发送和集合有关的键事件通知：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">redis</span> <span class="mf">127.0.0.1</span><span class="o">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">CONFIG</span> <span class="n">SET</span> <span class="n">notify</span><span class="o">-</span><span class="n">keyspace</span><span class="o">-</span><span class="n">events</span> <span class="n">Es</span>
+<span class="n">OK</span>
+</pre></div>
+</div>
+<p>接着，
+让客户端订阅模式 <code class="docutils literal"><span class="pre">__keyevent*</span></code> ，
+接收所有键事件通知：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp"># 0 号终端</span>
+
+<span class="n">redis</span> <span class="mf">127.0.0.1</span><span class="o">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">PSUBSCRIBE</span> <span class="n">__keyevent</span><span class="o">*</span>
+<span class="n">Reading</span> <span class="n">messages</span><span class="p">...</span> <span class="p">(</span><span class="n">press</span> <span class="n">Ctrl</span><span class="o">-</span><span class="n">C</span> <span class="n">to</span> <span class="n">quit</span><span class="p">)</span>
+<span class="mi">1</span><span class="p">)</span> <span class="s">&quot;psubscribe&quot;</span>
+<span class="mi">2</span><span class="p">)</span> <span class="s">&quot;_keyevent*&quot;</span>
+<span class="mi">3</span><span class="p">)</span> <span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">1</span>
+</pre></div>
+</div>
+<p>然后，
+开启另一个终端，
+启动 Redis 客户端，
+发送以下命令：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp"># 1 号终端</span>
+
+<span class="n">redis</span> <span class="mf">127.0.0.1</span><span class="o">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">SADD</span> <span class="n">favorite</span><span class="o">-</span><span class="n">fruits</span> <span class="n">orange</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">1</span>
+</pre></div>
+</div>
+<p>命令发送完毕之后，
+切换回 <code class="docutils literal"><span class="pre">0</span></code> 号终端，
+可以看到，
+客户端接收到了新的键事件通知：</p>
+<div class="highlight-c"><div class="highlight"><pre># 0 号终端
+
+1) &quot;pmessage&quot;
+2) &quot;__keyevent*&quot;            # 被匹配的模式
+3) &quot;__keyevent@0__:sadd&quot;    # 消息的来源频道
+4) &quot;favorite-fruits&quot;        # 执行 SADD 命令的键
+</pre></div>
+</div>
+<p>以下是这个通知的完整发送步骤：</p>
+<ol class="arabic simple">
+<li>Redis 接收并处理输入的 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sadd.html">SADD</a> 命令，并执行前面说过的 <code class="docutils literal"><span class="pre">saddCommand</span></code> 函数。</li>
+<li><code class="docutils literal"><span class="pre">saddCommand</span></code> 函数执行将新元素添加到集合的动作，然后以 <code class="docutils literal"><span class="pre">&quot;sadd&quot;</span></code> 为通知内容，调用 <code class="docutils literal"><span class="pre">notifyKeyspaceEvent</span></code> 函数：</li>
+</ol>
+<blockquote>
+<div><div class="highlight-c"><div class="highlight"><pre><span class="kt">void</span> <span class="nf">saddCommand</span><span class="p">(</span><span class="n">redisClient</span> <span class="o">*</span><span class="n">c</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="c1">// ...</span>
+
+    <span class="c1">// 如果有至少一个元素被成功添加，那么执行以下程序</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">added</span><span class="p">)</span> <span class="p">{</span>
+
+        <span class="c1">// ...</span>
+
+        <span class="c1">// 发送添加元素通知</span>
+        <span class="n">notifyKeyspaceEvent</span><span class="p">(</span><span class="n">REDIS_NOTIFY_SET</span><span class="p">,</span><span class="s">&quot;sadd&quot;</span><span class="p">,</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">db</span><span class="o">-&gt;</span><span class="n">id</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="c1">// ...</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div></blockquote>
+<ol class="arabic simple" start="3">
+<li><code class="docutils literal"><span class="pre">notifyKeyspaceEvent</span></code> 首先检查 <code class="docutils literal"><span class="pre">server.notify_keyspace_events</span></code> 属性，确保键空间事件功能已开启，并且 <code class="docutils literal"><span class="pre">&quot;sadd&quot;</span></code> 是服务器允许发送的通知之一：</li>
+</ol>
+<blockquote>
+<div><div class="highlight-c"><div class="highlight"><pre><span class="c1">// 如果服务器配置为不发送 type 类型的通知，那么直接返回</span>
+<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="n">server</span><span class="p">.</span><span class="n">notify_keyspace_events</span> <span class="o">&amp;</span> <span class="n">type</span><span class="p">))</span> <span class="k">return</span><span class="p">;</span>
+</pre></div>
+</div>
+</div></blockquote>
+<ol class="arabic simple" start="4">
+<li>接着 <code class="docutils literal"><span class="pre">notifyKeyspaceEvent</span></code> 检查是否需要发送键空间通知：</li>
+</ol>
+<blockquote>
+<div><div class="highlight-c"><div class="highlight"><pre><span class="cm">/* __keyspace@&lt;db&gt;__:&lt;key&gt; &lt;event&gt; notifications. */</span>
+<span class="c1">// 发送键空间通知</span>
+<span class="k">if</span> <span class="p">(</span><span class="n">server</span><span class="p">.</span><span class="n">notify_keyspace_events</span> <span class="o">&amp;</span> <span class="n">REDIS_NOTIFY_KEYSPACE</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="c1">// ...</span>
+
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>因为前面我们设置 <code class="docutils literal"><span class="pre">keyspace-notify-events</span></code> 选项的时候，并未包含字符 <code class="docutils literal"><span class="pre">'K'</span></code> ，所以这一检测的结果为假， <code class="docutils literal"><span class="pre">notifyKeyspaceEvent</span></code> 不会发送键空间通知。</p>
+</div></blockquote>
+<ol class="arabic simple" start="5">
+<li>最后 <code class="docutils literal"><span class="pre">notifyKeyspaceEvent</span></code> 检查是否需要发送键事件通知：</li>
+</ol>
+<blockquote>
+<div><div class="highlight-c"><div class="highlight"><pre><span class="cm">/* __keyevente@&lt;db&gt;__:&lt;event&gt; &lt;key&gt; notifications. */</span>
+<span class="c1">// 发送键事件通知</span>
+<span class="k">if</span> <span class="p">(</span><span class="n">server</span><span class="p">.</span><span class="n">notify_keyspace_events</span> <span class="o">&amp;</span> <span class="n">REDIS_NOTIFY_KEYEVENT</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="c1">// ...</span>
+
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>因为我们提供给服务器的 <code class="docutils literal"><span class="pre">keyspace-notify-event</span></code> 选项包含字符 <code class="docutils literal"><span class="pre">'E'</span></code> ，所以这个检测为真。</p>
+<p>程序将构建一条内容为 <code class="docutils literal"><span class="pre">&quot;favorite-fruits&quot;</span></code> 的事件通知，并调用 <code class="docutils literal"><span class="pre">pubsubPublishMessage</span></code> 函数，将通知发送到 <code class="docutils literal"><span class="pre">__keyevent&#64;0__:sadd</span></code> 频道。</p>
+</div></blockquote>
+<ol class="arabic simple" start="6">
+<li>至此， <code class="docutils literal"><span class="pre">notifyKeyspaceEvent</span></code> 执行完毕，整个发送步骤完成。</li>
+</ol>
+</div>
+<div class="section" id="id9">
+<h2>总结<a class="headerlink" href="#id9" title="Permalink to this headline">¶</a></h2>
+<p>以上介绍的三个函数就是 <code class="docutils literal"><span class="pre">notify.c</span></code> 中的所有内容了 ——
+通过使用内建的订阅与发布功能为基础，
+Redis 只用了不到 150 行代码就实现了键空间通知功能，
+这可以说是 Redis 又一次高效地重用代码来实现新功能的例子，
+其中的模块化思想非常值得我们学习。</p>
+</div>
+<div class="section" id="id10">
+<h2>扩展阅读<a class="headerlink" href="#id10" title="Permalink to this headline">¶</a></h2>
+<p>如果有兴趣弄清楚订阅与发布模块是如何分发信息的，
+可以参考 <a class="reference external" href="http://www.huangz.me/en/latest/storage/redis_code_analysis/pubsub.html">订阅与发布模块的源码分析文章</a> ，或者《<a class="reference external" href="http://redisbook.com">Redis 设计与实现</a>》中的《<a class="reference external" href="http://www.redisbook.com/en/latest/feature/pubsub.html">订阅与发布</a>》章节。</p>
+<div class="line-block">
+<div class="line">huangz</div>
+<div class="line">2013.4.18</div>
+</div>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">键空间通知</a><ul>
+<li><a class="reference internal" href="#id3">选择通知的类型</a></li>
+<li><a class="reference internal" href="#id4">通知的发送</a></li>
+<li><a class="reference internal" href="#id7">实例</a></li>
+<li><a class="reference internal" href="#id9">总结</a></li>
+<li><a class="reference internal" href="#id10">扩展阅读</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="watch-and-unwatch.html"
+                        title="previous chapter">WATCH 和 UNWATCH</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="pubsub_command.html"
+                        title="next chapter">PUBSUB 命令</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

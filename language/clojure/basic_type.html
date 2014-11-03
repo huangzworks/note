@@ -1,0 +1,326 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>基本类型 &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="up" title="Clojure" href="index.html" />
+    <link rel="next" title="复合类型" href="composite_type.html" />
+    <link rel="prev" title="Clojure" href="index.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="composite_type.html" title="复合类型"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="Clojure"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Clojure</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>基本类型<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="id2">
+<h2>整数<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>只要有需要的话，整数会在多个类型之间自动转换，以满足长度需求：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">class </span><span class="mi">10086</span><span class="p">)</span>
+<span class="nv">java.lang.Long</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">class </span><span class="mi">10086000000000000000000000000000000</span><span class="p">)</span>
+<span class="nv">clojure.lang.BigInt</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id3">
+<h2>有限精度浮点数<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<p>Clojure 默认使用有限精度的浮点数，类型为 <code class="docutils literal"><span class="pre">Double</span></code> ：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">class </span><span class="mf">3.14</span><span class="p">)</span>
+<span class="nv">java.lang.Double</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id4">
+<h2>无限精度浮点数<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h2>
+<p>无限精度浮点数需要在数值的最后加上后缀 <code class="docutils literal"><span class="pre">M</span></code> ：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">class </span><span class="mf">3.144444444444444444444444444444444444444444444444444444444444444444444444</span><span class="nv">M</span><span class="p">)</span>
+<span class="nv">java.math.BigDecimal</span>
+</pre></div>
+</div>
+<p>无限精度浮点数的类型为 <code class="docutils literal"><span class="pre">BigDecimal</span></code> 。</p>
+</div>
+<div class="section" id="id5">
+<h2>有理数<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h2>
+<p>为了进一步加强对高精度计算的支持， Clojure 提供了有理数类型：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">class </span><span class="p">(</span><span class="nb">/ </span><span class="mi">1</span> <span class="mi">3</span><span class="p">))</span>
+<span class="nv">clojure.lang.Ratio</span>
+</pre></div>
+</div>
+<p>在进行高精度计算时，使用有理数会比使用无限精度浮点数得到更精确的结果。</p>
+</div>
+<div class="section" id="id6">
+<h2>字符<a class="headerlink" href="#id6" title="Permalink to this headline">¶</a></h2>
+<p>单个字符用 <code class="docutils literal"><span class="pre">\</span></code> 作为前缀来表示：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="sc">\a</span>
+<span class="sc">\a</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">class </span><span class="sc">\a</span><span class="p">)</span>
+<span class="nv">java.lang.Character</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id7">
+<h2>字符串<a class="headerlink" href="#id7" title="Permalink to this headline">¶</a></h2>
+<p>字符串使用 <code class="docutils literal"><span class="pre">&quot;</span></code> 符号包围：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="s">&quot;i&#39;m a string&quot;</span>
+<span class="s">&quot;i&#39;m a string&quot;</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">class </span><span class="s">&quot;i&#39;m a string&quot;</span><span class="p">)</span>
+<span class="nv">java.lang.String</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id8">
+<h2>关键字<a class="headerlink" href="#id8" title="Permalink to this headline">¶</a></h2>
+<p>一个关键字总是指向它自身，因为这个原因，它可以用作是比字符串更高效的比对手段：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="ss">:keyword</span>
+<span class="ss">:keyword</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">class </span><span class="ss">:keyword</span><span class="p">)</span>
+<span class="nv">clojure.lang.Keyword</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">identical? </span><span class="ss">:keyword</span> <span class="ss">:keyword</span><span class="p">)</span>   <span class="c1">; 对象比对</span>
+<span class="nv">true</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">= </span><span class="ss">:keyword</span> <span class="ss">:keyword</span><span class="p">)</span>            <span class="c1">; 值比对</span>
+<span class="nv">true</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id9">
+<h2>符号<a class="headerlink" href="#id9" title="Permalink to this headline">¶</a></h2>
+<p>符号在求值时，返回的是它在当前上下文中所指向的值：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="k">def </span><span class="nv">number</span> <span class="mi">10086</span><span class="p">)</span>   <span class="c1">; 定义一个变量</span>
+<span class="o">#</span><span class="ss">&#39;user/number</span>
+
+<span class="nv">user=&gt;</span> <span class="ss">&#39;number</span>  <span class="c1">; 一个符号值</span>
+<span class="nv">number</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">eval </span><span class="ss">&#39;number</span><span class="p">)</span>   <span class="c1">; 求值符号值</span>
+<span class="mi">10086</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="nil">
+<h2>nil<a class="headerlink" href="#nil" title="Permalink to this headline">¶</a></h2>
+<p><code class="docutils literal"><span class="pre">nil</span></code> 是一个特殊值，它表示“空”，如果一个函数不返回任何值，那么它返回 <code class="docutils literal"><span class="pre">nil</span></code> 。</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="nv">nil</span>
+<span class="nv">nil</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">class </span><span class="nv">nil</span><span class="p">)</span>
+<span class="nv">nil</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">prn</span><span class="p">)</span>
+
+<span class="nv">nil</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id10">
+<h2>布尔<a class="headerlink" href="#id10" title="Permalink to this headline">¶</a></h2>
+<p>布尔值包含 <code class="docutils literal"><span class="pre">true</span></code> 和 <code class="docutils literal"><span class="pre">false</span></code> 两个值：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="nv">true</span>
+<span class="nv">true</span>
+
+<span class="nv">user=&gt;</span> <span class="nv">false</span>
+<span class="nv">false</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">class </span><span class="nv">true</span><span class="p">)</span>
+<span class="nv">java.lang.Boolean</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">class </span><span class="nv">false</span><span class="p">)</span>
+<span class="nv">java.lang.Boolean</span>
+</pre></div>
+</div>
+<p>在 Clojure 中，除了 <code class="docutils literal"><span class="pre">nil</span></code> 和 <code class="docutils literal"><span class="pre">false</span></code> 之外，其他任何值都被看作是 <code class="docutils literal"><span class="pre">true</span></code> ，这和 C 语言和其他一些函数式语言稍有不同，需要注意：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">false? </span><span class="nv">nil</span><span class="p">)</span>
+<span class="nv">false</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">false? </span><span class="nv">false</span><span class="p">)</span>
+<span class="nv">true</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">false? </span><span class="mi">0</span><span class="p">)</span>
+<span class="nv">false</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">false? </span><span class="s">&quot;&quot;</span><span class="p">)</span>
+<span class="nv">false</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">false? </span><span class="p">(</span><span class="nf">list</span><span class="p">))</span>
+<span class="nv">false</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id11">
+<h2>函数<a class="headerlink" href="#id11" title="Permalink to this headline">¶</a></h2>
+<p>函数也是 Clojure 中的第一类对象，因此它也是其中一种基本类型值：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="k">fn </span><span class="p">[]</span> <span class="s">&quot;hello moto&quot;</span><span class="p">)</span>
+<span class="o">#</span><span class="nv">&lt;user$eval94$fn__95</span> <span class="nv">user$eval94$fn__95</span><span class="o">@</span><span class="mi">155</span><span class="nv">bb17&gt;</span>
+</pre></div>
+</div>
+<p>稍后的章节会介绍更多和函数相关的内容。</p>
+</div>
+<div class="section" id="id12">
+<h2>元数据<a class="headerlink" href="#id12" title="Permalink to this headline">¶</a></h2>
+<p>元数据（metadata）是一个映射，可以添加到一个符号或者一个 collection 当中，用作编译提示，或者给开发者提供额外的信息。</p>
+<p><code class="docutils literal"><span class="pre">with-meta</span></code> 用于为对象添加元数据：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="k">def </span><span class="nv">s</span> <span class="p">(</span><span class="nb">with-meta </span><span class="ss">&#39;a-symbol</span> <span class="p">{</span><span class="ss">:author</span> <span class="s">&quot;huangz&quot;</span><span class="p">}))</span>
+<span class="o">#</span><span class="ss">&#39;user/s</span>
+
+<span class="nv">user=&gt;</span> <span class="nv">s</span>
+<span class="nv">a-symbol</span>
+</pre></div>
+</div>
+<p>以上代码为符号 <code class="docutils literal"><span class="pre">s</span></code> 添加了包含 <code class="docutils literal"><span class="pre">:author</span></code> 信息的元数据。</p>
+<p><code class="docutils literal"><span class="pre">meta</span></code> 函数用于取出对象的元数据：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">meta </span><span class="nv">s</span><span class="p">)</span>
+<span class="p">{</span><span class="ss">:author</span> <span class="s">&quot;huangz&quot;</span><span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id13">
+<h2>正则表达式<a class="headerlink" href="#id13" title="Permalink to this headline">¶</a></h2>
+<p>正则表达式可以通过 reader 宏 <code class="docutils literal"><span class="pre">#&quot;pattern&quot;</span></code> 在读入期创建，或者使用 <code class="docutils literal"><span class="pre">re-pattern</span></code> 函数在运行时创建，这两种方式都会创建一个 <code class="docutils literal"><span class="pre">java.util.regexp.Pattern</span></code> 对象。</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">class </span><span class="o">#</span><span class="s">&quot;pattern&quot;</span><span class="p">)</span>
+<span class="nv">java.util.regex.Pattern</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">re-seq </span><span class="o">#</span><span class="s">&quot;[0-9]+&quot;</span> <span class="s">&quot;abs123def345ghi567&quot;</span><span class="p">)</span>
+<span class="p">(</span><span class="s">&quot;123&quot;</span> <span class="s">&quot;345&quot;</span> <span class="s">&quot;567&quot;</span><span class="p">)</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nb">re-seq </span><span class="o">#</span><span class="s">&quot;\w+&quot;</span> <span class="s">&quot;one-two/three&quot;</span><span class="p">)</span>
+<span class="p">(</span><span class="s">&quot;one&quot;</span> <span class="s">&quot;two&quot;</span> <span class="s">&quot;three&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">re-seq</span></code> 函数惰性地返回字符串中的所有匹配。</p>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">基本类型</a><ul>
+<li><a class="reference internal" href="#id2">整数</a></li>
+<li><a class="reference internal" href="#id3">有限精度浮点数</a></li>
+<li><a class="reference internal" href="#id4">无限精度浮点数</a></li>
+<li><a class="reference internal" href="#id5">有理数</a></li>
+<li><a class="reference internal" href="#id6">字符</a></li>
+<li><a class="reference internal" href="#id7">字符串</a></li>
+<li><a class="reference internal" href="#id8">关键字</a></li>
+<li><a class="reference internal" href="#id9">符号</a></li>
+<li><a class="reference internal" href="#nil">nil</a></li>
+<li><a class="reference internal" href="#id10">布尔</a></li>
+<li><a class="reference internal" href="#id11">函数</a></li>
+<li><a class="reference internal" href="#id12">元数据</a></li>
+<li><a class="reference internal" href="#id13">正则表达式</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="index.html"
+                        title="previous chapter">Clojure</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="composite_type.html"
+                        title="next chapter">复合类型</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

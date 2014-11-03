@@ -1,0 +1,226 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Clojure &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="next" title="基本类型" href="basic_type.html" />
+    <link rel="prev" title="huangz/note" href="../../index.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="basic_type.html" title="基本类型"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="../../index.html" title="huangz/note"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="clojure">
+<h1>Clojure<a class="headerlink" href="#clojure" title="Permalink to this headline">¶</a></h1>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="basic_type.html">基本类型</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="basic_type.html#id2">整数</a></li>
+<li class="toctree-l2"><a class="reference internal" href="basic_type.html#id3">有限精度浮点数</a></li>
+<li class="toctree-l2"><a class="reference internal" href="basic_type.html#id4">无限精度浮点数</a></li>
+<li class="toctree-l2"><a class="reference internal" href="basic_type.html#id5">有理数</a></li>
+<li class="toctree-l2"><a class="reference internal" href="basic_type.html#id6">字符</a></li>
+<li class="toctree-l2"><a class="reference internal" href="basic_type.html#id7">字符串</a></li>
+<li class="toctree-l2"><a class="reference internal" href="basic_type.html#id8">关键字</a></li>
+<li class="toctree-l2"><a class="reference internal" href="basic_type.html#id9">符号</a></li>
+<li class="toctree-l2"><a class="reference internal" href="basic_type.html#nil">nil</a></li>
+<li class="toctree-l2"><a class="reference internal" href="basic_type.html#id10">布尔</a></li>
+<li class="toctree-l2"><a class="reference internal" href="basic_type.html#id11">函数</a></li>
+<li class="toctree-l2"><a class="reference internal" href="basic_type.html#id12">元数据</a></li>
+<li class="toctree-l2"><a class="reference internal" href="basic_type.html#id13">正则表达式</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="composite_type.html">复合类型</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="composite_type.html#id2">列表</a></li>
+<li class="toctree-l2"><a class="reference internal" href="composite_type.html#id3">向量</a></li>
+<li class="toctree-l2"><a class="reference internal" href="composite_type.html#id4">映射</a></li>
+<li class="toctree-l2"><a class="reference internal" href="composite_type.html#id5">集合</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="seq.html">序列</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="seq.html#id2">序列接口</a></li>
+<li class="toctree-l2"><a class="reference internal" href="seq.html#id3">创建序列对象</a></li>
+<li class="toctree-l2"><a class="reference internal" href="seq.html#id4">处理序列</a></li>
+<li class="toctree-l2"><a class="reference internal" href="seq.html#id5">惰性序列</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="variable.html">定义变量</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="variable.html#id2">全局变量</a></li>
+<li class="toctree-l2"><a class="reference internal" href="variable.html#id3">私有变量</a></li>
+<li class="toctree-l2"><a class="reference internal" href="variable.html#id4">局部变量</a></li>
+<li class="toctree-l2"><a class="reference internal" href="variable.html#id5">动态变量</a></li>
+<li class="toctree-l2"><a class="reference internal" href="variable.html#id6">单次赋值</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="function.html">定义函数</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="function.html#id2">匿名函数</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function.html#id3">具名函数</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function.html#id4">多种参数函数</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function.html#id5">函数的前置条件和后置条件</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function.html#reader">使用 reader 宏创建函数</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function.html#letfn">使用 letfn 定义临时函数</a></li>
+<li class="toctree-l2"><a class="reference internal" href="function.html#id6">私有函数</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="condition.html">条件求值</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="condition.html#if">if</a></li>
+<li class="toctree-l2"><a class="reference internal" href="condition.html#do">do</a></li>
+<li class="toctree-l2"><a class="reference internal" href="condition.html#when">when</a></li>
+<li class="toctree-l2"><a class="reference internal" href="condition.html#cond">cond</a></li>
+<li class="toctree-l2"><a class="reference internal" href="condition.html#if-not-when-not">if-not 、 when-not</a></li>
+<li class="toctree-l2"><a class="reference internal" href="condition.html#if-let-when-let">if-let 、 when-let</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="namespace.html">命名空间</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="namespace.html#id2">带前缀和不带前缀的名字</a></li>
+<li class="toctree-l2"><a class="reference internal" href="namespace.html#id3">创建命名空间</a></li>
+<li class="toctree-l2"><a class="reference internal" href="namespace.html#require">require</a></li>
+<li class="toctree-l2"><a class="reference internal" href="namespace.html#refer">refer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="namespace.html#use">use</a></li>
+<li class="toctree-l2"><a class="reference internal" href="namespace.html#import">import</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="multimethod.html">多态方法</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="multimethod.html#id2">创建多态方法</a></li>
+<li class="toctree-l2"><a class="reference internal" href="multimethod.html#id3">派生</a></li>
+<li class="toctree-l2"><a class="reference internal" href="multimethod.html#id4">默认分派值</a></li>
+<li class="toctree-l2"><a class="reference internal" href="multimethod.html#id5">解决冲突</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="record.html">记录</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="record.html#id2">类型的必要性</a></li>
+<li class="toctree-l2"><a class="reference internal" href="record.html#id3">记录的创建和使用</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="protocol.html">协议</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="protocol.html#id2">实现协议</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="concurrency-and-parallelism.html">并发与并行</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="concurrency-and-parallelism.html#id2">延时计算</a></li>
+<li class="toctree-l2"><a class="reference internal" href="concurrency-and-parallelism.html#id3">并发线程</a></li>
+<li class="toctree-l2"><a class="reference internal" href="concurrency-and-parallelism.html#id4">数据流变量</a></li>
+<li class="toctree-l2"><a class="reference internal" href="concurrency-and-parallelism.html#id5">并行</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="reference-type.html">引用类型</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="reference-type.html#id2">通用设施</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="misc.html">杂项</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="misc.html#id2">文件载入</a></li>
+<li class="toctree-l2"><a class="reference internal" href="misc.html#id3">延迟求值</a></li>
+<li class="toctree-l2"><a class="reference internal" href="misc.html#id4">异常的捕捉与处理</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="../../index.html"
+                        title="previous chapter">huangz/note</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="basic_type.html"
+                        title="next chapter">基本类型</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

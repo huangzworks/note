@@ -1,0 +1,271 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>多态方法 &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="up" title="Clojure" href="index.html" />
+    <link rel="next" title="记录" href="record.html" />
+    <link rel="prev" title="命名空间" href="namespace.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="record.html" title="记录"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="namespace.html" title="命名空间"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Clojure</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>多态方法<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<p>Clojure 通过多态方法（multimethod）来对运行时多态进行支持。</p>
+<p>一个多态方法包含一个分派函数（dispatching function），以及一个或多个方法（method）。每个方法对应并处理一个分派值（dispatching value），分派值由分派函数产生。</p>
+<p>如果一个分配值没有对应的方法，那么它的分配值为默认分派值（默认为 <code class="docutils literal"><span class="pre">:default</span></code>），如果多态方法没设置默认方法，那么抛出错误。</p>
+<div class="section" id="id2">
+<h2>创建多态方法<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p><code class="docutils literal"><span class="pre">defmulti</span></code> 用于定义多态方法，并设置分派函数。</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="p">(</span><span class="kd">defmulti </span><span class="nv">complier</span> <span class="ss">:os</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>以上代码定义了多态方法 <code class="docutils literal"><span class="pre">complier</span></code> ，并定义 <code class="docutils literal"><span class="pre">:os</span></code> 为它的分派函数。</p>
+<p><code class="docutils literal"><span class="pre">defmethod</span></code> 创建并安装适用于给定分派值的新方法到给定的多态方法，以下代码定义了两个 <code class="docutils literal"><span class="pre">complier</span></code> 方法，它们的分派值分别是 <code class="docutils literal"><span class="pre">::unix</span></code> 和 <code class="docutils literal"><span class="pre">::osx</span></code> ：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="p">(</span><span class="kd">defmethod </span><span class="nv">complier</span> <span class="ss">::unix</span> <span class="p">[</span><span class="nv">m</span><span class="p">]</span>
+    <span class="p">(</span><span class="nb">get </span><span class="nv">m</span> <span class="ss">:complier</span><span class="p">)</span>
+<span class="p">)</span>
+
+<span class="p">(</span><span class="kd">defmethod </span><span class="nv">complier</span> <span class="ss">::oxs</span> <span class="p">[</span><span class="nv">m</span><span class="p">]</span>
+    <span class="p">(</span><span class="nb">get </span><span class="nv">m</span> <span class="ss">:complier</span><span class="p">)</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>对于不同的数据，多态方法 <code class="docutils literal"><span class="pre">complier</span></code> 返回不同的值：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">complier</span> <span class="p">{</span><span class="ss">:os</span> <span class="ss">::unix</span> <span class="ss">:complier</span> <span class="s">&quot;cc&quot;</span><span class="p">})</span>
+<span class="s">&quot;cc&quot;</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">complier</span> <span class="p">{</span><span class="ss">:os</span> <span class="ss">::osx</span> <span class="ss">:complier</span> <span class="s">&quot;gcc&quot;</span><span class="p">})</span>
+<span class="s">&quot;gcc&quot;</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id3">
+<h2>派生<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<p>可以注意到，前面用于处理 <code class="docutils literal"><span class="pre">::unix</span></code> 和 <code class="docutils literal"><span class="pre">::osx</span></code> 的方法实现实际上是完全一样的，这意味着，我们应该可以通过重用，减少其中一个方法的定义 —— <code class="docutils literal"><span class="pre">drive</span></code> 函数就是用来完成这事的：它可以让某个分派值的方法派生（derive）另一个分派值的方法，从而达到实现重用的目的。</p>
+<p>比如说，我们大可不必为 <code class="docutils literal"><span class="pre">::unix</span></code> 和 <code class="docutils literal"><span class="pre">::osx</span></code> 两个分派值都编写方法，而是以让分派值为 <code class="docutils literal"><span class="pre">::osx</span></code> 的方法派生分派值 <code class="docutils literal"><span class="pre">::unix</span></code> 的方法，达到重用实现的目的：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="p">(</span><span class="kd">defmethod </span><span class="nv">complier</span> <span class="ss">::unix</span> <span class="p">[</span><span class="nv">m</span><span class="p">]</span>
+    <span class="p">(</span><span class="nb">get </span><span class="nv">m</span> <span class="ss">:complier</span><span class="p">)</span>
+<span class="p">)</span>
+
+<span class="p">(</span><span class="nf">derive</span> <span class="ss">::osx</span> <span class="ss">::unix</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>测试新的多态方法：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">complier</span> <span class="p">{</span><span class="ss">:os</span> <span class="ss">::unix</span> <span class="ss">:complier</span> <span class="s">&quot;cc&quot;</span><span class="p">})</span>
+<span class="s">&quot;cc&quot;</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">complier</span> <span class="p">{</span><span class="ss">:os</span> <span class="ss">::osx</span> <span class="ss">:complier</span> <span class="s">&quot;gcc&quot;</span><span class="p">})</span>
+<span class="s">&quot;gcc&quot;</span>
+</pre></div>
+</div>
+<p>有一系列函数，比如 <code class="docutils literal"><span class="pre">isa?</span></code> 、 <code class="docutils literal"><span class="pre">instance?</span></code> 、 <code class="docutils literal"><span class="pre">parents</span></code> 、 <code class="docutils literal"><span class="pre">ancestors</span></code> 、 <code class="docutils literal"><span class="pre">descendants</span></code> 等函数，可以用于检查分派值之间的继承关系：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">isa?</span> <span class="ss">::osx</span> <span class="ss">::unix</span><span class="p">)</span>
+<span class="nv">true</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">parents</span> <span class="ss">::osx</span><span class="p">)</span>
+<span class="o">#</span><span class="p">{</span><span class="ss">:user/unix</span><span class="p">}</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">parents</span> <span class="ss">::unix</span><span class="p">)</span>
+<span class="nv">nil</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">ancestors</span> <span class="ss">::osx</span><span class="p">)</span>
+<span class="o">#</span><span class="p">{</span><span class="ss">:user/unix</span><span class="p">}</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">descendants</span> <span class="ss">::unix</span><span class="p">)</span>
+<span class="o">#</span><span class="p">{</span><span class="ss">:user/osx</span><span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id4">
+<h2>默认分派值<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h2>
+<p>如果一个分派值没有对应的方法，并且该多态方法也没有设置默认方法，那么抛出一个错误：</p>
+<div class="highlight-clojure"><div class="highlight"><pre>user=&gt; (complier {:os ::linux :complier &quot;gcc&quot;})
+IllegalArgumentException No method in multimethod &#39;complier&#39; for dispatch value: :user/linux  clojure.lang.MultiFn.getFn (MultiFn.java:121)
+</pre></div>
+</div>
+<p>要防止这种错误，可以为多态方法设置默认方法。默认方法的设置非常简单，只要为分派值 <code class="docutils literal"><span class="pre">:default</span></code> 设置方法就可以了：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="p">(</span><span class="kd">defmethod </span><span class="nv">complier</span> <span class="ss">:default</span> <span class="p">[</span><span class="nv">m</span><span class="p">]</span>
+    <span class="p">(</span><span class="nb">str </span><span class="s">&quot;maybe is &quot;</span> <span class="p">(</span><span class="nb">get </span><span class="nv">m</span> <span class="ss">:complier</span><span class="p">))</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>现在，来试试默认方法：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">complier</span> <span class="p">{</span><span class="ss">:os</span> <span class="ss">::linux</span> <span class="ss">:complier</span> <span class="s">&quot;gcc&quot;</span><span class="p">})</span>
+<span class="s">&quot;maybe is gcc&quot;</span>
+
+<span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">complier</span> <span class="p">{</span><span class="ss">:os</span> <span class="ss">::windows</span> <span class="ss">:complier</span> <span class="s">&quot;vc&quot;</span><span class="p">})</span>
+<span class="s">&quot;maybe is vc&quot;</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id5">
+<h2>解决冲突<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h2>
+<p>有时候，一个方法可能同时派生了两个方法，在调用这个方法时，就会产生冲突，因为 Clojure 不知道应该使用哪个方法。</p>
+<p>考虑以下例子，分派值为 <code class="docutils literal"><span class="pre">::c</span></code> 的方法分别派生了分派值 <code class="docutils literal"><span class="pre">::a</span></code> 和 <code class="docutils literal"><span class="pre">::b</span></code> 的两个方法：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="p">(</span><span class="kd">defmulti </span><span class="nv">msg</span> <span class="ss">:tag</span><span class="p">)</span>
+
+<span class="p">(</span><span class="kd">defmethod </span><span class="nv">msg</span> <span class="ss">::a</span> <span class="p">[</span><span class="nv">m</span><span class="p">]</span>
+    <span class="s">&quot;this is a&quot;</span>
+<span class="p">)</span>
+
+<span class="p">(</span><span class="kd">defmethod </span><span class="nv">msg</span> <span class="ss">::b</span> <span class="p">[</span><span class="nv">m</span><span class="p">]</span>
+    <span class="s">&quot;this is b&quot;</span>
+<span class="p">)</span>
+
+<span class="p">(</span><span class="nf">derive</span> <span class="ss">::c</span> <span class="ss">::a</span><span class="p">)</span>
+<span class="p">(</span><span class="nf">derive</span> <span class="ss">::c</span> <span class="ss">::b</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>这时分派值 <code class="docutils literal"><span class="pre">::c</span></code> 的方法调用就会产生冲突：</p>
+<div class="highlight-clojure"><div class="highlight"><pre>user=&gt; (msg {:tag ::c})
+IllegalArgumentException Multiple methods in multimethod &#39;msg&#39; match dispatch value: :user/c -&gt; :user/b and :user/a, and neither is preferred  clojure.lang.MultiFn.findAndCacheBestMethod (MultiFn.java:136)
+</pre></div>
+</div>
+<p>要解决这种冲突，需要通过 <code class="docutils literal"><span class="pre">prefer-method</span></code> 函数显式调整两个祖先方法的优先级，让它们的其中一个优先成为 <code class="docutils literal"><span class="pre">::c</span></code> 分派值的方法，从而解决方法冲突：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="p">(</span><span class="kd">defmulti </span><span class="nv">msg</span> <span class="ss">:tag</span><span class="p">)</span>
+
+<span class="p">(</span><span class="kd">defmethod </span><span class="nv">msg</span> <span class="ss">::a</span> <span class="p">[</span><span class="nv">m</span><span class="p">]</span>
+    <span class="s">&quot;this is a&quot;</span>
+<span class="p">)</span>
+
+<span class="p">(</span><span class="kd">defmethod </span><span class="nv">msg</span> <span class="ss">::b</span> <span class="p">[</span><span class="nv">m</span><span class="p">]</span>
+    <span class="s">&quot;this is b&quot;</span>
+<span class="p">)</span>
+
+<span class="p">(</span><span class="nf">derive</span> <span class="ss">::c</span> <span class="ss">::a</span><span class="p">)</span>
+<span class="p">(</span><span class="nf">derive</span> <span class="ss">::c</span> <span class="ss">::b</span><span class="p">)</span>
+
+<span class="p">(</span><span class="nf">prefer-method</span> <span class="nv">msg</span> <span class="ss">::a</span> <span class="ss">::b</span><span class="p">)</span>     <span class="c1">; 新增</span>
+</pre></div>
+</div>
+<p>上面新增的代码表示，分派值 <code class="docutils literal"><span class="pre">::a</span></code> 的方法优先级高于分派值 <code class="docutils literal"><span class="pre">::b</span></code> 的方法，当出现二义性(ambiguous)时，就会优先使用分派值为 <code class="docutils literal"><span class="pre">::a</span></code> 的方法。</p>
+<p>现在，再次调用 <code class="docutils literal"><span class="pre">::c</span></code> 分派值的方法，它就会使用 <code class="docutils literal"><span class="pre">::a</span></code> 分派值的方法：</p>
+<div class="highlight-clojure"><div class="highlight"><pre><span class="nv">user=&gt;</span> <span class="p">(</span><span class="nf">msg</span> <span class="p">{</span><span class="ss">:tag</span> <span class="ss">::c</span><span class="p">})</span>
+<span class="s">&quot;this is a&quot;</span>
+</pre></div>
+</div>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">多态方法</a><ul>
+<li><a class="reference internal" href="#id2">创建多态方法</a></li>
+<li><a class="reference internal" href="#id3">派生</a></li>
+<li><a class="reference internal" href="#id4">默认分派值</a></li>
+<li><a class="reference internal" href="#id5">解决冲突</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="namespace.html"
+                        title="previous chapter">命名空间</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="record.html"
+                        title="next chapter">记录</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

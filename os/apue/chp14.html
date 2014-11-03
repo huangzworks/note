@@ -1,0 +1,237 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>第 14 章：高级 I/O &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="up" title="《UNIX 环境高级编程》笔记" href="index.html" />
+    <link rel="next" title="《Unix 网络编程》笔记" href="../../network/unp/index.html" />
+    <link rel="prev" title="第 11 章：线程" href="chp11.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../network/unp/index.html" title="《Unix 网络编程》笔记"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="chp11.html" title="第 11 章：线程"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">《UNIX 环境高级编程》笔记</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="i-o">
+<h1>第 14 章：高级 I/O<a class="headerlink" href="#i-o" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="id1">
+<h2>14.2 非阻塞 I/O<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h2>
+<p><strong>低速系统调用</strong> —— <em>可能会使进程永远阻塞</em>的一类系统调用，包括：</p>
+<ul>
+<li><div class="first line-block">
+<div class="line">如果某类文件类型（例如管道、终端设备和网络设备）的数据并不存在，则读操作会使调用者永远阻塞。</div>
+<div class="line">[huangz：一般可以通过设置最长等待时间(timeout)来解决这类问题。]</div>
+</div>
+</li>
+<li><p class="first">如果数据不能立即被上述同类型的文件接受（由于在管道中无空间、网络流控制等），则写操作也会使调用者永远阻塞。</p>
+</li>
+<li><div class="first line-block">
+<div class="line">在某种条件发生之前，打开某些类型的文件会被阻塞。</div>
+<div class="line">例如打开一个终端设备可能需要到与之连接的调制解调器应答；</div>
+<div class="line">又例如在没有其他进程已用读模式打开该 FIFO 时若以只写模式打开 FIFO ，那么也要等待。</div>
+</div>
+</li>
+<li><p class="first">对已经上锁的文件进行读/写。</p>
+</li>
+<li><p class="first">某些 <code class="docutils literal"><span class="pre">ioctl</span></code> 操作。</p>
+</li>
+<li><p class="first">某些进程间通信函数（见第 15 章）</p>
+</li>
+</ul>
+<p>&#8212;</p>
+<p><strong>非阻塞 I/O</strong> 使我们可以调用 <code class="docutils literal"><span class="pre">open</span></code> 、 <code class="docutils literal"><span class="pre">read</span></code> 和 <code class="docutils literal"><span class="pre">write</span></code> 这样的 I/O 操作，并使这些操作不会永远阻塞。
+如果这种操作不能完成，则调用立即出错返回，表示该操作如继续执行将阻塞。</p>
+<p>&#8212;</p>
+<p>有两种方法可以让给定的文件描述符使用非阻塞形式：</p>
+<ol class="arabic simple">
+<li>在调用 <code class="docutils literal"><span class="pre">open</span></code> 打开文件时，执行 <code class="docutils literal"><span class="pre">O_NONBLOCK</span></code> 标志</li>
+<li>如果描述符已经被打开，那么使用 <code class="docutils literal"><span class="pre">fcntl</span></code> 函数打开 <code class="docutils literal"><span class="pre">O_NONBLOCK</span></code> 标志（见3.14节)</li>
+</ol>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">POSIX.1 要求，对于一个非阻塞的描述符，如果无数据可读，则 <code class="docutils literal"><span class="pre">read</span></code> 返回 <code class="docutils literal"><span class="pre">-1</span></code> ，并设置 <code class="docutils literal"><span class="pre">errno</span></code> 为 <code class="docutils literal"><span class="pre">EAGAIN</span></code> 。</p>
+</div>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last"><code class="docutils literal"><span class="pre">O_NONBLOCK</span></code> 影响共享同一文件表的所有用户，但与通过其他文件表对同一设备的访问无关（见图 3-1 和图 3-3）。</p>
+</div>
+<p>&#8212;</p>
+<p>非阻塞 I/O 实例：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * 14-1.c</span>
+<span class="cm"> */</span>
+<span class="cp">#include &quot;apue.h&quot;</span>
+<span class="cp">#include &lt;errno.h&gt;</span>
+<span class="cp">#include &lt;fcntl.h&gt;</span>
+
+<span class="kt">char</span> <span class="n">buf</span> <span class="p">[</span><span class="mi">500000</span><span class="p">];</span>
+
+<span class="kt">int</span>
+<span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="kt">int</span> <span class="n">ntowrite</span><span class="p">,</span> <span class="n">nwrite</span><span class="p">;</span>
+    <span class="kt">char</span> <span class="o">*</span><span class="n">ptr</span><span class="p">;</span>
+
+    <span class="n">ntowrite</span> <span class="o">=</span> <span class="n">read</span><span class="p">(</span><span class="n">STDIN_FILENO</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">buf</span><span class="p">));</span>
+    <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">&quot;read %d bytes</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">ntowrite</span><span class="p">);</span>
+
+    <span class="c1">// 设置非阻塞标志</span>
+    <span class="n">set_fl</span><span class="p">(</span><span class="n">STDOUT_FILENO</span><span class="p">,</span> <span class="n">O_NONBLOCK</span><span class="p">);</span>
+
+    <span class="n">ptr</span> <span class="o">=</span> <span class="n">buf</span><span class="p">;</span>
+    <span class="k">while</span> <span class="p">(</span><span class="n">ntowrite</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">errno</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+        <span class="n">nwrite</span> <span class="o">=</span> <span class="n">write</span><span class="p">(</span><span class="n">STDOUT_FILENO</span><span class="p">,</span> <span class="n">ptr</span><span class="p">,</span> <span class="n">ntowrite</span><span class="p">);</span>
+        <span class="c1">// 每次都将写出字节数和错误号码打印到标准输出</span>
+        <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">&quot;nwrite = %d, errno = %d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">nwrite</span><span class="p">,</span> <span class="n">errno</span><span class="p">);</span>
+        
+        <span class="k">if</span> <span class="p">(</span><span class="n">nwrite</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">ptr</span> <span class="o">+=</span> <span class="n">nwrite</span><span class="p">;</span>
+            <span class="n">ntowrite</span> <span class="o">-=</span> <span class="n">nwrite</span><span class="p">;</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="c1">// 清除非阻塞</span>
+    <span class="n">clr_fl</span><span class="p">(</span><span class="n">STDOUT_FILENO</span><span class="p">,</span> <span class="n">O_NONBLOCK</span><span class="p">);</span>
+
+    <span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>输出：</p>
+<div class="highlight-c"><div class="highlight"><pre>$ ./14-1.out &lt; /bin/bash 2&gt;14-1-err.out
+
+$ head 14-1-err.out
+read 500000 bytes
+nwrite = 6144, errno = 0    // 成功
+nwrite = -1, errno = 11     // 失败 (AGAIN)
+nwrite = -1, errno = 11
+nwrite = -1, errno = 11
+nwrite = -1, errno = 11
+nwrite = -1, errno = 11
+nwrite = -1, errno = 11
+nwrite = -1, errno = 11
+nwrite = -1, errno = 11
+</pre></div>
+</div>
+<p>在这个实例中，程序发出了数千个 <code class="docutils literal"><span class="pre">write</span></code> 调用，但是只有非常小的一部分额是真正输出数据的，其余的都是出错返回。</p>
+<p>这种形式的循环成为<strong>轮询</strong>，它的缺点是浪费了 CPU 时间。14.5 节将介绍非阻塞描述符的 I/O 多路转接，这是进行这种操作的一种比较有效的方法。</p>
+<p>通过多线程，可以避免使用阻塞 I/O ：即使一个线程被阻塞了，另一个线程也可以继续工作。不过多线程的使用增加了复杂性，很容易造成得不偿失的结果。</p>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">第 14 章：高级 I/O</a><ul>
+<li><a class="reference internal" href="#id1">14.2 非阻塞 I/O</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="chp11.html"
+                        title="previous chapter">第 11 章：线程</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="../../network/unp/index.html"
+                        title="next chapter">《Unix 网络编程》笔记</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

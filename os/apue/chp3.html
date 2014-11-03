@@ -1,0 +1,1296 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>第 3 章：文件 I/O &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="up" title="《UNIX 环境高级编程》笔记" href="index.html" />
+    <link rel="next" title="第 4 章：文件和目录" href="chp4.html" />
+    <link rel="prev" title="源码的编译和使用" href="use-code.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="chp4.html" title="第 4 章：文件和目录"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="use-code.html" title="源码的编译和使用"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">《UNIX 环境高级编程》笔记</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="i-o">
+<h1>第 3 章：文件 I/O<a class="headerlink" href="#i-o" title="Permalink to this headline">¶</a></h1>
+<p>本章先讨论 <code class="docutils literal"><span class="pre">open</span></code> 、 <code class="docutils literal"><span class="pre">read</span></code> 、 <code class="docutils literal"><span class="pre">write</span></code> 、 <code class="docutils literal"><span class="pre">lseek</span></code> 和 <code class="docutils literal"><span class="pre">close</span></code> 五个函数，
+再介绍 <code class="docutils literal"><span class="pre">dup</span></code> 、 <code class="docutils literal"><span class="pre">fcntl</span></code> 、 <code class="docutils literal"><span class="pre">sync</span></code> 、 <code class="docutils literal"><span class="pre">fsync</span></code> 和 <code class="docutils literal"><span class="pre">ioctl</span></code> 函数。</p>
+<p>其中，
+<code class="docutils literal"><span class="pre">write</span></code> 和 <code class="docutils literal"><span class="pre">read</span></code> 被称为不带缓冲的 I/O （unbuffered I/O），
+因为每次执行这两个函数，都需要调用内核中的一个系统调用。</p>
+<div class="section" id="id1">
+<h2>文件描述符<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h2>
+<p>对于内核而言，所有打开的文件都通过文件描述符引用。</p>
+<p>文件描述符是一个非符整数。
+当打开一个现有文件或者创建一个新文件时，内核向进程返回一个文件描述符。
+当读或写一个文件时，使用 <code class="docutils literal"><span class="pre">open</span></code> 或 <code class="docutils literal"><span class="pre">creat</span></code> 返回的文件描述符标识该文件，并将其作为参数传送给 <code class="docutils literal"><span class="pre">read</span></code> 或者 <code class="docutils literal"><span class="pre">write</span></code> 函数。</p>
+<p>按照惯例，UNIX 系统 SHELL 将描述符 <code class="docutils literal"><span class="pre">0</span></code> 、 <code class="docutils literal"><span class="pre">1</span></code> 、 <code class="docutils literal"><span class="pre">2</span></code> 分别和标准输入、标准输出和标准错误输出相关联。
+在遵循 POSIX 规范的程序中，它们分别被定义于 <code class="docutils literal"><span class="pre">unistd.h</span></code> 中的常量 <code class="docutils literal"><span class="pre">STDIN_FILENO</span></code> 、 <code class="docutils literal"><span class="pre">STDOUT_FILENO</span></code> 和 <code class="docutils literal"><span class="pre">STDERR_FILENO</span></code> 所代替。</p>
+</div>
+<div class="section" id="id2">
+<h2>打开文件<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>函数 <code class="docutils literal"><span class="pre">open</span></code> 用于打开或创建一个文件：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#include &lt;sys/types.h&gt;</span>
+<span class="cp">#include &lt;sys/stat.h&gt;</span>
+<span class="cp">#include &lt;fcntl.h&gt;</span>
+
+<span class="kt">int</span> <span class="nf">open</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">pathname</span><span class="p">,</span> <span class="kt">int</span> <span class="n">flags</span><span class="p">);</span>
+<span class="kt">int</span> <span class="nf">open</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">pathname</span><span class="p">,</span> <span class="kt">int</span> <span class="n">flags</span><span class="p">,</span> <span class="kt">mode_t</span> <span class="n">mode</span><span class="p">);</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">flags</span></code> 参数的值可以是多个 <code class="docutils literal"><span class="pre">fcntl.h</span></code> 所定义的常量的二进制或。</p>
+<p>以下三个参数的其中一个是必须的：</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="29%" />
+<col width="71%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">常量</th>
+<th class="head">作用</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">O_RDONLY</span></code></td>
+<td>只读打开</td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">O_WRONLY</span></code></td>
+<td>只写打开</td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">O_RDWR</span></code></td>
+<td>读、写打开</td>
+</tr>
+</tbody>
+</table>
+<p>以下这些参数则是可选的：</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="13%" />
+<col width="87%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">常量</th>
+<th class="head">作用</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">O_APPEND</span></code></td>
+<td>每次写时都将内容追加到文件的尾端。</td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">O_CREAT</span></code></td>
+<td>如果指定文件不存在，那么创建并打开它。当使用这个参数时，需要指定 <code class="docutils literal"><span class="pre">mode</span></code> 参数的值（见下文）。</td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">O_EXCL</span></code></td>
+<td>在和 <code class="docutils literal"><span class="pre">O_CREAT</span></code> 一起使用时，确保文件是由本次调用所新创建的，如果文件已存在， <code class="docutils literal"><span class="pre">open</span></code> 执行失败。</td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">O_TRUNC</span></code></td>
+<td>如果打开目标是一个文件，并且允许进行写入，那么清除文件内原有的所有内容。</td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">O_SYNC</span></code></td>
+<td>当对文件进行写入时，阻塞直到写入内容已经被物理地保存到硬件为止。</td>
+</tr>
+</tbody>
+</table>
+<p>更多可选参数请参考 <code class="docutils literal"><span class="pre">open</span></code> 命令的文档。</p>
+<p>当 <code class="docutils literal"><span class="pre">open</span></code> 用于创建新文件时，文件的权限由 <code class="docutils literal"><span class="pre">mode</span> <span class="pre">&amp;</span> <span class="pre">~umask</span></code> 计算得出， <code class="docutils literal"><span class="pre">mode</span></code> 参数的值可以是以下多个常量的二进制或（定义于 <code class="docutils literal"><span class="pre">sys/stat.h</span></code> ）：</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="11%" />
+<col width="89%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">常量</th>
+<th class="head">意义</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td>S_IRWXU</td>
+<td>00700 user (file owner) has  read,  write  and  execute permission</td>
+</tr>
+<tr class="row-odd"><td>S_IRUSR</td>
+<td>00400 user has read permission</td>
+</tr>
+<tr class="row-even"><td>S_IWUSR</td>
+<td>00200 user has write permission</td>
+</tr>
+<tr class="row-odd"><td>S_IXUSR</td>
+<td>00100 user has execute permission</td>
+</tr>
+<tr class="row-even"><td>S_IRWXG</td>
+<td>00070 group has read, write and execute permission</td>
+</tr>
+<tr class="row-odd"><td>S_IRGRP</td>
+<td>00040 group has read permission</td>
+</tr>
+<tr class="row-even"><td>S_IWGRP</td>
+<td>00020 group has write permission</td>
+</tr>
+<tr class="row-odd"><td>S_IXGRP</td>
+<td>00010 group has execute permission</td>
+</tr>
+<tr class="row-even"><td>S_IRWXO</td>
+<td>00007 others have read, write and execute permission</td>
+</tr>
+<tr class="row-odd"><td>S_IROTH</td>
+<td>00004 others have read permission</td>
+</tr>
+<tr class="row-even"><td>S_IWOTH</td>
+<td>00002 others have write permission</td>
+</tr>
+<tr class="row-odd"><td>S_IXOTH</td>
+<td>00001 others have execute permission</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="open-o-creat-o-excl">
+<h2>open 函数的 O_CREAT 和 O_EXCL 参数<a class="headerlink" href="#open-o-creat-o-excl" title="Permalink to this headline">¶</a></h2>
+<p>设置了 <code class="docutils literal"><span class="pre">O_CREAT</span></code> 和 <code class="docutils literal"><span class="pre">O_EXCL</span></code> 参数的 <code class="docutils literal"><span class="pre">open</span></code> 函数都可以在文件不存在时创建并打开新文件，它们之间的区别在于：
+如果文件已经存在， <code class="docutils literal"><span class="pre">O_CREAT</span></code> 直接打开（而不创建）文件， 而 <code class="docutils literal"><span class="pre">O_CREAT</span> <span class="pre">|</span> <span class="pre">O_EXCL</span></code> 则会报告错误。</p>
+<p>以下是一个使用 <code class="docutils literal"><span class="pre">O_CREAT</span></code> 参数的 <code class="docutils literal"><span class="pre">open</span></code> 函数：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// 3-open-create-file.c</span>
+
+<span class="cp">#include &lt;fcntl.h&gt;</span>
+<span class="cp">#include &lt;sys/types.h&gt;</span>
+<span class="cp">#include &lt;sys/stat.h&gt;</span>
+<span class="cp">#include &lt;stdio.h&gt;</span>
+<span class="cp">#include &lt;errno.h&gt;</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="kt">char</span> <span class="n">filename</span><span class="p">[]</span> <span class="o">=</span> <span class="s">&quot;test-3-open-create-file.txt&quot;</span><span class="p">;</span>
+
+    <span class="kt">int</span> <span class="n">flag</span> <span class="o">=</span> <span class="n">O_RDWR</span> <span class="o">|</span> <span class="n">O_CREAT</span><span class="p">;</span>    <span class="c1">// open/create for read and write</span>
+
+    <span class="kt">mode_t</span> <span class="n">mode</span> <span class="o">=</span> <span class="n">S_IRUSR</span> <span class="o">|</span> <span class="n">S_IWUSR</span> <span class="o">|</span> <span class="n">S_IRGRP</span> <span class="o">|</span> <span class="n">S_IROTH</span><span class="p">;</span>    <span class="c1">// 644</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">open</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">flag</span><span class="p">,</span> <span class="n">mode</span><span class="p">)</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;open/create file fail</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;errno = %d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">errno</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>当这个程序第一次调用时，它会创建并打开 <code class="docutils literal"><span class="pre">test-3-open-create-file.txt</span></code> 文件，
+当程序第二次执行时，它只打开已存在的文件：</p>
+<div class="highlight-c"><div class="highlight"><pre>$ ./3-open-create-file.out
+
+$ ls -l test-3-open-create-file.txt
+-rw-r--r-- 1 huangz huangz 0  1月 21 11:41 test-3-open-create-file.txt
+
+$ ./3-open-create-file.out
+
+$ ls -l test-3-open-create-file.txt
+-rw-r--r-- 1 huangz huangz 0  1月 21 11:41 test-3-open-create-file.txt
+</pre></div>
+</div>
+<p>以下是一个使用 <code class="docutils literal"><span class="pre">O_CREAT</span> <span class="pre">|</span> <span class="pre">O_EXCL</span></code> 参数的 <code class="docutils literal"><span class="pre">open</span></code> 函数：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// 3-open-create-with-excl.c</span>
+
+<span class="cp">#include &lt;fcntl.h&gt;</span>
+<span class="cp">#include &lt;sys/types.h&gt;</span>
+<span class="cp">#include &lt;sys/stat.h&gt;</span>
+<span class="cp">#include &lt;stdio.h&gt;</span>
+<span class="cp">#include &lt;errno.h&gt;</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="kt">char</span> <span class="n">filename</span><span class="p">[]</span> <span class="o">=</span> <span class="s">&quot;test-3-open-create-with-excl.txt&quot;</span><span class="p">;</span>
+
+    <span class="c1">// create for read and write</span>
+    <span class="c1">// and make sure this call create the file</span>
+    <span class="kt">int</span> <span class="n">flag</span> <span class="o">=</span> <span class="n">O_RDWR</span> <span class="o">|</span> <span class="n">O_CREAT</span> <span class="o">|</span> <span class="n">O_EXCL</span><span class="p">;</span>    
+
+    <span class="kt">mode_t</span> <span class="n">mode</span> <span class="o">=</span> <span class="n">S_IRUSR</span> <span class="o">|</span> <span class="n">S_IWUSR</span> <span class="o">|</span> <span class="n">S_IRGRP</span> <span class="o">|</span> <span class="n">S_IROTH</span><span class="p">;</span>    <span class="c1">// 644</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">open</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">flag</span><span class="p">,</span> <span class="n">mode</span><span class="p">)</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">errno</span> <span class="o">==</span> <span class="n">EEXIST</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">printf</span><span class="p">(</span><span class="s">&quot;open fail cause file already exists.</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+            <span class="n">printf</span><span class="p">(</span><span class="s">&quot;open/create file fail</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+            <span class="n">printf</span><span class="p">(</span><span class="s">&quot;errno = %d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">errno</span><span class="p">);</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>当这个程序第一次调用时，它会创建并打开 <code class="docutils literal"><span class="pre">test-3-open-create-with-excl.txt</span></code> 文件，
+当第二次调用时， <code class="docutils literal"><span class="pre">open</span></code> 会返回一个错误，显示文件已存在：</p>
+<div class="highlight-c"><div class="highlight"><pre>$ ./3-open-create-with-excl.out
+
+$ ls -l test-3-open-create-with-excl.txt
+-rw-r--r-- 1 huangz huangz 0  1月 21 12:10 test-3-open-create-with-excl.txt
+
+$ ./3-open-create-with-excl.out
+open fail cause file already exists.
+</pre></div>
+</div>
+</div>
+<div class="section" id="open">
+<h2>open 的返回值<a class="headerlink" href="#open" title="Permalink to this headline">¶</a></h2>
+<p>当 <code class="docutils literal"><span class="pre">open</span></code> 成功打开文件时，
+它的返回值总是当前最小的未使用描述符值。</p>
+<p>比如说，如果标准输入、输出和出错占用了 <code class="docutils literal"><span class="pre">0</span></code> 、 <code class="docutils literal"><span class="pre">1</span></code> 和 <code class="docutils literal"><span class="pre">2</span></code> 三个描述符，
+那么进程第一个打开的文件的描述符必定是 <code class="docutils literal"><span class="pre">3</span></code> 。</p>
+<p>以下程序打印进程首个文件描述符的值：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// 3-print-file-descriptor.c</span>
+
+<span class="cp">#include &lt;fcntl.h&gt;</span>
+<span class="cp">#include &lt;stdio.h&gt;</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="kt">char</span> <span class="n">filename</span><span class="p">[]</span> <span class="o">=</span> <span class="s">&quot;test-3-print-file-descriptor&quot;</span><span class="p">;</span>
+
+    <span class="kt">int</span> <span class="n">flag</span> <span class="o">=</span> <span class="n">O_RDWR</span> <span class="o">|</span> <span class="n">O_CREAT</span><span class="p">;</span>
+
+    <span class="kt">mode_t</span> <span class="n">mode</span> <span class="o">=</span> <span class="n">S_IRUSR</span> <span class="o">|</span> <span class="n">S_IWUSR</span> <span class="o">|</span> <span class="n">S_IRGRP</span> <span class="o">|</span> <span class="n">S_IROTH</span><span class="p">;</span>    <span class="c1">// 644</span>
+
+    <span class="kt">int</span> <span class="n">fd</span> <span class="o">=</span> <span class="n">open</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">flag</span><span class="p">,</span> <span class="n">mode</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">fd</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;open/create file fail</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">else</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;fd = %d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">fd</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>执行结果：</p>
+<div class="highlight-c"><div class="highlight"><pre>$ ./3-print-file-descriptor.out
+fd = 3
+</pre></div>
+</div>
+</div>
+<div class="section" id="creat">
+<h2>用 creat 函数创建文件<a class="headerlink" href="#creat" title="Permalink to this headline">¶</a></h2>
+<p><code class="docutils literal"><span class="pre">creat</span></code> 函数提供了一种创建新的空白文件的快捷方式，
+它等效于调用 <code class="docutils literal"><span class="pre">open(pathname,</span> <span class="pre">O_WRONLY</span> <span class="pre">|</span> <span class="pre">O_CREAT</span> <span class="pre">|</span> <span class="pre">O_TRUNC,</span> <span class="pre">mode)</span></code> ：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#include &lt;sys/types.h&gt;</span>
+<span class="cp">#include &lt;sys/stat.h&gt;</span>
+<span class="cp">#include &lt;fcntl.h&gt;</span>
+
+<span class="kt">int</span> <span class="nf">creat</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">pathname</span><span class="p">,</span> <span class="kt">mode_t</span> <span class="n">mode</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>以下代码展示了 <code class="docutils literal"><span class="pre">creat</span></code> 的用法，它创建一个空白的 <code class="docutils literal"><span class="pre">test-3-creat</span></code> 文件：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// 3-creat.c</span>
+
+<span class="cp">#include &lt;sys/stat.h&gt;</span>
+<span class="cp">#include &lt;sys/types.h&gt;</span>
+<span class="cp">#include &lt;fcntl.h&gt;</span>
+<span class="cp">#include &lt;stdio.h&gt;</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="kt">char</span> <span class="n">filename</span><span class="p">[]</span> <span class="o">=</span> <span class="s">&quot;test-3-creat&quot;</span><span class="p">;</span>
+
+    <span class="kt">mode_t</span> <span class="n">mode</span> <span class="o">=</span> <span class="n">S_IRUSR</span> <span class="o">|</span> <span class="n">S_IWUSR</span> <span class="o">|</span> <span class="n">S_IRGRP</span> <span class="o">|</span> <span class="n">S_IROTH</span><span class="p">;</span>    <span class="c1">// 644</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">creat</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">mode</span><span class="p">)</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;creat file fail</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span> 
+    <span class="k">else</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;creat file OK</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>执行结果：</p>
+<div class="highlight-c"><div class="highlight"><pre>$ ./3-creat.out
+creat file OK
+
+$ ls -l test-3-creat
+-rw-r--r-- 1 huangz huangz 0  1月 21 15:29 test-3-creat
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">creat</span></code> 的一个缺点是，它以只写方式打开所创建的问题，
+如果需要既创建文件，又读写文件，最好还是用 <code class="docutils literal"><span class="pre">open</span></code> 函数。</p>
+<p>以下代码的执行效果类似于 <code class="docutils literal"><span class="pre">creat</span></code> ，但是打开的文件可以同时用于读和写：
+<code class="docutils literal"><span class="pre">open(pathname,</span> <span class="pre">O_RDWR</span> <span class="pre">|</span> <span class="pre">O_CREAT</span> <span class="pre">|</span> <span class="pre">O_TRUNC,</span> <span class="pre">mode);</span></code> 。</p>
+</div>
+<div class="section" id="id3">
+<h2>关闭文件<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<p>调用 <code class="docutils literal"><span class="pre">close</span></code> 可以显式地关闭一个文件描述符：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#include &lt;unistd.h&gt;</span>
+
+<span class="kt">int</span> <span class="nf">close</span><span class="p">(</span><span class="kt">int</span> <span class="n">fd</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>当一个文件描述符被关闭时，和它相关联的所有记录锁都会被移除。</p>
+<p>如果 <code class="docutils literal"><span class="pre">fd</span></code> 是指向一个底层打开文件描述（underlying open file description）的最后一个文件描述符，
+那么和文件描述相关的资源会被释放。</p>
+<p>如果一个文件被 <code class="docutils literal"><span class="pre">unlink(2)</span></code> 函数移除过，
+并且 <code class="docutils literal"><span class="pre">fd</span></code> 是指向这个文件的最后一个引用，
+那么这个文件会被删除。</p>
+<p>和 <code class="docutils literal"><span class="pre">write(2)</span></code> 函数类似，
+当一个文件描述符被关闭时，系统并不保证缓存中的文件内容会被保存到物理硬件中，
+如果要保证这一点，请使用 <code class="docutils literal"><span class="pre">fsnyc(2)</span></code> 函数。</p>
+<p>忘记检查 <code class="docutils literal"><span class="pre">close</span></code> 的返回值是一种常见的编程错误。</p>
+<p>当一个进程终止时，内核会自动关闭进程打开的所有文件，很多程序都利用了这一功能而不显式地调用 <code class="docutils literal"><span class="pre">close</span></code> 。</p>
+<p>以下示例代码打开并关闭一个文件：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// 3-close.c</span>
+
+<span class="cp">#include &lt;fcntl.h&gt;</span>
+<span class="cp">#include &lt;unistd.h&gt;</span>
+<span class="cp">#include &lt;stdio.h&gt;</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="kt">char</span> <span class="n">filename</span><span class="p">[]</span> <span class="o">=</span> <span class="s">&quot;test-3-close&quot;</span><span class="p">;</span>
+    <span class="kt">mode_t</span> <span class="n">mode</span> <span class="o">=</span> <span class="n">S_IRUSR</span> <span class="o">|</span> <span class="n">S_IWUSR</span> <span class="o">|</span> <span class="n">S_IRGRP</span> <span class="o">|</span> <span class="n">S_IROTH</span><span class="p">;</span>    <span class="c1">// 644</span>
+
+    <span class="kt">int</span> <span class="n">fd</span> <span class="o">=</span> <span class="n">creat</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">mode</span><span class="p">);</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">fd</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;creat file fail</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">else</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;creat file OK</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">close</span><span class="p">(</span><span class="n">fd</span><span class="p">)</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;close file fail</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">2</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">else</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;close file OK</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>执行结果：</p>
+<div class="highlight-c"><div class="highlight"><pre>$ ./3-close.out
+creat file OK
+close file OK
+</pre></div>
+</div>
+</div>
+<div class="section" id="id4">
+<h2>文件写入<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h2>
+<p>要向一个打开的文件描述符写入内容，可以使用 <code class="docutils literal"><span class="pre">write</span></code> 函数：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#include &lt;unistd.h&gt;</span>
+
+<span class="kt">ssize_t</span> <span class="nf">write</span><span class="p">(</span><span class="kt">int</span> <span class="n">fd</span><span class="p">,</span> <span class="k">const</span> <span class="kt">void</span> <span class="o">*</span><span class="n">buf</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">count</span><span class="p">);</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">write</span></code> 将 <code class="docutils literal"><span class="pre">buf</span></code> 中的内容写入 <code class="docutils literal"><span class="pre">count</span></code> 字节到 <code class="docutils literal"><span class="pre">fd</span></code> 所指向的文件。</p>
+<p><code class="docutils literal"><span class="pre">ssize_t</span></code> 类型的返回值说明成功写入了多少字节，这个值可能出现三种情况：</p>
+<ol class="arabic simple">
+<li>返回值和 <code class="docutils literal"><span class="pre">count</span></code> 相等，写入成功。</li>
+<li>返回值小于 <code class="docutils literal"><span class="pre">count</span></code> ，写入部分成功，但还有一部分内容未写入：当写入中途程序发现底层空间不足，或者写入被信号打断时，就会出现这种情况。</li>
+<li>返回值等于 <code class="docutils literal"><span class="pre">-1</span></code> ，写入出错，没有任何内容被写入：当 <code class="docutils literal"><span class="pre">fd</span></code> 不合法或者 <code class="docutils literal"><span class="pre">buf</span></code> 不合法时，就会出现这种情况。具体的错误保存在 <code class="docutils literal"><span class="pre">errno</span></code> 变量中。</li>
+</ol>
+<p>对于普通文件，写操作从当前偏移量开始，
+如果文件是以 <code class="docutils literal"><span class="pre">O_APPEND</span></code> 模式打开，那么在每次写入之前，都会原子性执行以下两个步骤：</p>
+<ol class="arabic simple">
+<li>将文件的偏移量设置为文件的末尾</li>
+<li>执行写操作</li>
+</ol>
+<p>在一次成功写之后，成功写入的字节数量就是文件大小增加的字节数量。</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last"><code class="docutils literal"><span class="pre">write</span></code> 执行成功并不保证数据已经被保存到磁盘，如果要保证这一点，需要执行 <code class="docutils literal"><span class="pre">fsync</span></code> 。</p>
+</div>
+<p>以下代码展示了 <code class="docutils literal"><span class="pre">write</span></code> 的用法，它创建/打开一个文件，将一个字符串写入到文件，最后关闭文件：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// 3-write.c</span>
+
+<span class="cp">#include &lt;sys/types.h&gt;</span>
+<span class="cp">#include &lt;sys/stat.h&gt;</span>
+<span class="cp">#include &lt;unistd.h&gt;</span>
+<span class="cp">#include &lt;stdio.h&gt;</span>
+
+<span class="cp">#define CONTENT &quot;hello moto\n&quot;</span>
+<span class="cp">#define LEN_OF_CONTENT sizeof(CONTENT)</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+    
+    <span class="kt">char</span> <span class="n">filename</span><span class="p">[]</span> <span class="o">=</span> <span class="s">&quot;test-3-write&quot;</span><span class="p">;</span>
+    <span class="kt">mode_t</span> <span class="n">mode</span> <span class="o">=</span> <span class="n">S_IRUSR</span> <span class="o">|</span> <span class="n">S_IWUSR</span> <span class="o">|</span> <span class="n">S_IRGRP</span> <span class="o">|</span> <span class="n">S_IROTH</span><span class="p">;</span>    <span class="c1">// 644</span>
+
+    <span class="kt">int</span> <span class="n">fd</span> <span class="o">=</span> <span class="n">creat</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">mode</span><span class="p">);</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">fd</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;creat file FAIL</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="kt">int</span> <span class="n">write_byte</span> <span class="o">=</span> <span class="n">write</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">CONTENT</span><span class="p">,</span> <span class="n">LEN_OF_CONTENT</span><span class="p">);</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">write_byte</span> <span class="o">!=</span> <span class="n">LEN_OF_CONTENT</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;write file FAIL</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">2</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>执行结果：</p>
+<div class="highlight-c"><div class="highlight"><pre>$ ./3-write.out
+
+$ cat test-3-write
+hello moto
+</pre></div>
+</div>
+</div>
+<div class="section" id="id5">
+<h2>读文件<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h2>
+<p><code class="docutils literal"><span class="pre">read</span></code> 函数用于读取文件的内容：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#include &lt;unistd.h&gt;</span>
+
+<span class="kt">ssize_t</span> <span class="nf">read</span><span class="p">(</span><span class="kt">int</span> <span class="n">fd</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">buf</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">count</span><span class="p">);</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">read</span></code> 从 <code class="docutils literal"><span class="pre">fd</span></code> 指向的文件中读取 <code class="docutils literal"><span class="pre">count</span></code> 字节，并将内容保存到 <code class="docutils literal"><span class="pre">buf</span></code> 中。
+如果 <code class="docutils literal"><span class="pre">count</span></code> 大于 <code class="docutils literal"><span class="pre">SSIZE_MAX</span></code> ，那么结果将是未定义的。</p>
+<p><code class="docutils literal"><span class="pre">read</span></code> 的返回值可能是以下三种情况：</p>
+<ol class="arabic simple">
+<li>返回值等于 <code class="docutils literal"><span class="pre">count</span></code> ：读取成功。</li>
+<li>返回值小于 <code class="docutils literal"><span class="pre">count</span></code> ：读取部分成功，可能读取已经到遇到文件的末尾（EOF），或者读取被信号中断 —— 前一种情况可以通过再次调用 <code class="docutils literal"><span class="pre">read</span></code> ，然后检查返回值是否为 <code class="docutils literal"><span class="pre">0</span></code> 来判断；而后一种情况则可以通过检查 <code class="docutils literal"><span class="pre">errno</span></code> 是否为 <code class="docutils literal"><span class="pre">EINTR</span></code> 来判断。</li>
+<li>返回值为 <code class="docutils literal"><span class="pre">-1</span></code> ：读取出错，错误值保存在 <code class="docutils literal"><span class="pre">errno</span></code> 。</li>
+</ol>
+<p>读取操作从文件的当前偏移量开始，在成功返回之后，文件的偏移量会加上实际读到的字节数。</p>
+<p>以下代码打开一个新的空白文件，往里写入一段文字，然后重新打开并读取和打印文件的内容：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// 3-read.c</span>
+
+<span class="cp">#include &lt;unistd.h&gt;</span>
+<span class="cp">#include &lt;stdio.h&gt;</span>
+<span class="cp">#include &lt;sys/stat.h&gt;</span>
+<span class="cp">#include &lt;sys/types.h&gt;</span>
+<span class="cp">#include &lt;fcntl.h&gt;</span>
+
+<span class="cp">#define CONTENT &quot;hello moto&quot;</span>
+<span class="cp">#define LEN_OF_CONTENT sizeof(CONTENT)</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="c1">// 1) create file</span>
+
+    <span class="kt">char</span> <span class="n">filename</span><span class="p">[]</span> <span class="o">=</span> <span class="s">&quot;test-3-read&quot;</span><span class="p">;</span>
+    <span class="kt">mode_t</span> <span class="n">mode</span> <span class="o">=</span> <span class="n">S_IRUSR</span> <span class="o">|</span> <span class="n">S_IWUSR</span> <span class="o">|</span> <span class="n">S_IRGRP</span> <span class="o">|</span> <span class="n">S_IROTH</span><span class="p">;</span>    <span class="c1">// 644</span>
+
+    <span class="kt">int</span> <span class="n">fd</span> <span class="o">=</span> <span class="n">creat</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">mode</span><span class="p">);</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">fd</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;creat file fail</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span> 
+
+   
+    <span class="c1">// 2) write file</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">write</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">CONTENT</span><span class="p">,</span> <span class="n">LEN_OF_CONTENT</span><span class="p">)</span> <span class="o">!=</span> <span class="n">LEN_OF_CONTENT</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;write error</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">2</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">close</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>
+
+
+    <span class="c1">// 3) reopen and read</span>
+
+    <span class="n">fd</span> <span class="o">=</span> <span class="n">open</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">O_RDONLY</span><span class="p">);</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">fd</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;open file fail</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">3</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="kt">char</span> <span class="n">buf</span><span class="p">[</span><span class="n">LEN_OF_CONTENT</span><span class="p">];</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">read</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">LEN_OF_CONTENT</span><span class="p">)</span> <span class="o">!=</span> <span class="n">LEN_OF_CONTENT</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;read file fail</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">4</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    
+    <span class="c1">// 4) print content</span>
+
+    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;file content: %s</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">buf</span><span class="p">);</span>
+
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>执行结果：</p>
+<div class="highlight-c"><div class="highlight"><pre>$ ./3-read.out
+file content: hello moto
+</pre></div>
+</div>
+</div>
+<div class="section" id="id6">
+<h2>文件偏移量<a class="headerlink" href="#id6" title="Permalink to this headline">¶</a></h2>
+<p>每个打开的文件都有一个与之相关联的“当前文件偏移量”（current file offset）。
+它通常是一个非负整数，用以度量从文件开始处计算的字节数。</p>
+<p>当读、写操作进行时，它们从当前文件偏移量开始，并使偏移量增加所读/写的字节数。</p>
+<p>当打开一个文件时，除非指定 <code class="docutils literal"><span class="pre">O_APPEND</span></code> 选项，否则偏移量被初始化为 <code class="docutils literal"><span class="pre">0</span></code> ，也就是文件第一个字节所在的位置。</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">设置一个文件的偏移量并不引发任何 I/O 操作，后面介绍文件表的时候会说到这一点。</p>
+</div>
+</div>
+<div class="section" id="id7">
+<h2>设置文件偏移量<a class="headerlink" href="#id7" title="Permalink to this headline">¶</a></h2>
+<p>除了根据读写操作进行移动外，偏移量还可以通过 <code class="docutils literal"><span class="pre">lseek</span></code> 函数显示地设定：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#include &lt;sys/types.h&gt;</span>
+<span class="cp">#include &lt;unistd.h&gt;</span>
+
+<span class="kt">off_t</span> <span class="nf">lseek</span><span class="p">(</span><span class="kt">int</span> <span class="n">fd</span><span class="p">,</span> <span class="kt">off_t</span> <span class="n">offset</span><span class="p">,</span> <span class="kt">int</span> <span class="n">whence</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>参数 <code class="docutils literal"><span class="pre">offset</span></code> 的解释与参数 <code class="docutils literal"><span class="pre">whence</span></code> 的值有关：</p>
+<ul class="simple">
+<li>若 <code class="docutils literal"><span class="pre">whence</span></code> 是 <code class="docutils literal"><span class="pre">SEEK_SET</span></code> ，则将该文件的偏移量设置为距文件开始处 <code class="docutils literal"><span class="pre">offset</span></code> 个字节。也即是，以文件头为开始，设置绝对偏移量。</li>
+<li>若 <code class="docutils literal"><span class="pre">whence</span></code> 是 <code class="docutils literal"><span class="pre">SEEK_CUR</span></code> ，则将该文件的偏移量加上 <code class="docutils literal"><span class="pre">offset</span></code> 的值， <code class="docutils literal"><span class="pre">offset</span></code> 可以是正数或负数。也即是，以当前偏移量为开始，设置相对偏移量。</li>
+<li>若 <code class="docutils literal"><span class="pre">whence</span></code> 是 <code class="docutils literal"><span class="pre">SEEK_END</span></code> ，则将该文件的偏移量设置为文件的长度加上 <code class="docutils literal"><span class="pre">offset</span></code> 的值， <code class="docutils literal"><span class="pre">offset</span></code> 可以是正数或负数。也即是，以文件末尾为开始，设置绝对偏移量。</li>
+</ul>
+<p><code class="docutils literal"><span class="pre">lseek</span></code> 成功执行时返回新的文件偏移量，设置失败则返回 <code class="docutils literal"><span class="pre">-1</span></code> ，并将错误信息保存到 <code class="docutils literal"><span class="pre">errno</span></code> 。</p>
+<p>在前面演示 <code class="docutils literal"><span class="pre">read</span></code> 函数的时候，程序使用了先关闭、再打开文件的办法来将文件的偏移量重置为 <code class="docutils literal"><span class="pre">0</span></code> ，有了 <code class="docutils literal"><span class="pre">lseek</span></code> 函数，这个重新打开的步骤就没有必要了：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// 3-lseek.c</span>
+
+<span class="cp">#include &lt;unistd.h&gt;</span>
+<span class="cp">#include &lt;stdio.h&gt;</span>
+<span class="cp">#include &lt;sys/stat.h&gt;</span>
+<span class="cp">#include &lt;sys/types.h&gt;</span>
+<span class="cp">#include &lt;fcntl.h&gt;</span>
+
+<span class="cp">#define CONTENT &quot;hello moto&quot;</span>
+<span class="cp">#define LEN_OF_CONTENT sizeof(CONTENT)</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="c1">// 1) creat file</span>
+
+    <span class="kt">char</span> <span class="n">filename</span><span class="p">[]</span> <span class="o">=</span> <span class="s">&quot;test-3-lseek&quot;</span><span class="p">;</span>
+    <span class="kt">mode_t</span> <span class="n">mode</span> <span class="o">=</span> <span class="n">S_IRUSR</span> <span class="o">|</span> <span class="n">S_IWUSR</span> <span class="o">|</span> <span class="n">S_IRGRP</span> <span class="o">|</span> <span class="n">S_IROTH</span><span class="p">;</span>    <span class="c1">// 644</span>
+
+    <span class="c1">// use open instead of creat for read and write</span>
+    <span class="kt">int</span> <span class="n">fd</span> <span class="o">=</span> <span class="n">open</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">O_RDWR</span><span class="p">,</span> <span class="n">mode</span><span class="p">);</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">fd</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;creat file fail</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">// 2) write file</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">write</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">CONTENT</span><span class="p">,</span> <span class="n">LEN_OF_CONTENT</span><span class="p">)</span> <span class="o">!=</span> <span class="n">LEN_OF_CONTENT</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;write error</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">2</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">// 3) set offset to 0</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">lseek</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">SEEK_SET</span><span class="p">)</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;lseek error</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">3</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">// 4) read and print conent</span>
+
+    <span class="kt">char</span> <span class="n">buf</span><span class="p">[</span><span class="n">LEN_OF_CONTENT</span><span class="p">];</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">read</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">LEN_OF_CONTENT</span><span class="p">)</span> <span class="o">!=</span> <span class="n">LEN_OF_CONTENT</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;read error</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">4</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;file conent: %s</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">buf</span><span class="p">);</span>
+
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>执行结果：</p>
+<div class="highlight-c"><div class="highlight"><pre>$ ./3-lseek.out
+file conent: hello moto
+</pre></div>
+</div>
+</div>
+<div class="section" id="id8">
+<h2>获取当前偏移量<a class="headerlink" href="#id8" title="Permalink to this headline">¶</a></h2>
+<p>并没有一个专门的函数来取出文件的当前偏移量，
+不过这一工作可以用 <code class="docutils literal"><span class="pre">lseek</span></code> 函数来完成。</p>
+<p>以下代码展示了如何获取文件的当前偏移量：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="kt">off_t</span> <span class="n">current_offset</span> <span class="o">=</span> <span class="n">lseek</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">SEEK_CUR</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>这个调用利用了 <code class="docutils literal"><span class="pre">lseek</span></code> 的返回值：在不对偏移量进行任何修改的情况下，返回的偏移量就是当前的偏移量。</p>
+</div>
+<div class="section" id="id9">
+<h2>文件空洞<a class="headerlink" href="#id9" title="Permalink to this headline">¶</a></h2>
+<p><code class="docutils literal"><span class="pre">lseek</span></code> 的偏移量并不一定要小于文件的大小，
+当偏移量大于文件的大小时，对该文件的下一次写将加长该文件，并在文件中构成一个空洞（hole），这一点是允许的。
+位于文件中但没有写过的字节都被读为 <code class="docutils literal"><span class="pre">0</span></code></p>
+<p>空洞并不要求在磁盘上占用储存区，无须为它分配磁盘块。</p>
+<p>以下程序创建一个带空洞的文件：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// 3-hole.c</span>
+
+<span class="cp">#include &lt;unistd.h&gt;</span>
+<span class="cp">#include &lt;sys/stat.h&gt;</span>
+<span class="cp">#include &lt;sys/types.h&gt;</span>
+<span class="cp">#include &lt;stdio.h&gt;</span>
+<span class="cp">#include &lt;fcntl.h&gt;</span>
+
+<span class="cp">#define FIRST_CONTENT &quot;abcdefg&quot;</span>
+<span class="cp">#define SECOND_CONTENT &quot;hello moto&quot;</span>
+
+<span class="cp">#define HOLE_LENGTH 256</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="c1">// 1) creat file</span>
+
+    <span class="kt">char</span> <span class="n">filename</span><span class="p">[]</span> <span class="o">=</span> <span class="s">&quot;test-3-hole&quot;</span><span class="p">;</span>
+    <span class="kt">mode_t</span> <span class="n">mode</span> <span class="o">=</span> <span class="n">S_IRUSR</span> <span class="o">|</span> <span class="n">S_IWUSR</span> <span class="o">|</span> <span class="n">S_IRGRP</span> <span class="o">|</span> <span class="n">S_IROTH</span><span class="p">;</span>    <span class="c1">// 644</span>
+
+    <span class="kt">int</span> <span class="n">fd</span> <span class="o">=</span> <span class="n">creat</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">mode</span><span class="p">);</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">fd</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;creat file fail</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">// 2) write first content</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">write</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">FIRST_CONTENT</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">FIRST_CONTENT</span><span class="p">))</span> <span class="o">!=</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">FIRST_CONTENT</span><span class="p">))</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;write first content fail</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">2</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">// 3) make hole</span>
+
+    <span class="n">lseek</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">HOLE_LENGTH</span><span class="p">,</span> <span class="n">SEEK_CUR</span><span class="p">);</span>
+
+    <span class="c1">// 4) write second content</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">write</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">SECOND_CONTENT</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">SECOND_CONTENT</span><span class="p">))</span> <span class="o">!=</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">SECOND_CONTENT</span><span class="p">))</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;write second content fail</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">2</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>使用 <code class="docutils literal"><span class="pre">od</span></code> 命令，并以字符串模式打开程序创建的文件，可以看到文件中的空洞：</p>
+<div class="highlight-c"><div class="highlight"><pre>./3-hole.out
+
+$ ls -l test-3-hole
+-rw-r--r-- 1 huangz huangz 275  1月 22 13:27 test-3-hole
+
+$ od -c test-3-hole
+0000000   a   b   c   d   e   f   g  \0  \0  \0  \0  \0  \0  \0  \0  \0
+0000020  \0  \0  \0  \0  \0  \0  \0  \0  \0  \0  \0  \0  \0  \0  \0  \0
+*
+0000400  \0  \0  \0  \0  \0  \0  \0  \0   h   e   l   l   o       m   o
+0000420   t   o  \0
+0000423
+</pre></div>
+</div>
+</div>
+<div class="section" id="seek-data-seek-hole">
+<h2>SEEK_DATA 和 SEEK_HOLE<a class="headerlink" href="#seek-data-seek-hole" title="Permalink to this headline">¶</a></h2>
+<p>从 Linux 3.1 开始， <code class="docutils literal"><span class="pre">lseek</span></code> 函数的 <code class="docutils literal"><span class="pre">whence</span></code> 参数还可以是 <code class="docutils literal"><span class="pre">SEEK_DATA</span></code> 或者 <code class="docutils literal"><span class="pre">SEEK_HOLE</span></code> ，
+这两个参数的作用如下：</p>
+<ul class="simple">
+<li><code class="docutils literal"><span class="pre">lseek(fd,</span> <span class="pre">offset,</span> <span class="pre">SEEK_DATA)</span></code> ：将偏移量移动到下一个包含数据的位置，该位置大于等于 <code class="docutils literal"><span class="pre">offset</span></code> 。如果 <code class="docutils literal"><span class="pre">offset</span></code> 已经指向数据，那么将偏移量设置为 <code class="docutils literal"><span class="pre">offset</span></code> 。</li>
+<li><code class="docutils literal"><span class="pre">lseek(fd,</span> <span class="pre">offset,</span> <span class="pre">SEEK_HOLE)</span></code> ：将偏移量移动到下一个包含空洞的位置，该位置大于等于 <code class="docutils literal"><span class="pre">offset</span></code> 。如果 <code class="docutils literal"><span class="pre">offset</span></code> 已经指向空洞，那么将偏移量设置为 <code class="docutils literal"><span class="pre">offset</span></code> 。如果在 <code class="docutils literal"><span class="pre">offset</span></code> 之后没有任何空洞，那么偏移量设置为文件的最末尾。（文件末尾也被视为是一个空洞，因为它同样以 <code class="docutils literal"><span class="pre">0</span></code> 结尾。）</li>
+</ul>
+<p>以下程序读入一个文件，并分别打印它的首个数据偏移量，以及它的首个空洞偏移量：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// 3-seek-data-and-hole.c</span>
+
+<span class="cp">#include &lt;stdio.h&gt;</span>
+<span class="cp">#include &lt;fcntl.h&gt;</span>
+<span class="cp">#include &lt;sys/types.h&gt;</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">argv</span><span class="p">[])</span> <span class="p">{</span>
+
+    <span class="c1">// 1) check filename input</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">argc</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;usage: ./out filename</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">// 2) open file for read</span>
+
+    <span class="kt">char</span> <span class="o">*</span><span class="n">filename</span> <span class="o">=</span> <span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">];</span>
+    <span class="kt">int</span> <span class="n">fd</span> <span class="o">=</span> <span class="n">open</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">O_RDONLY</span><span class="p">);</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">fd</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;open file fail</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">2</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">// 3) seek to first data</span>
+
+    <span class="kt">off_t</span> <span class="n">data_offset</span><span class="p">;</span>
+
+    <span class="n">data_offset</span> <span class="o">=</span> <span class="n">lseek</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">SEEK_DATA</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">data_offset</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;get data offset fail</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">4</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;first data offset of file %s is %lld</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">filename</span><span class="p">,</span> <span class="p">(</span><span class="kt">long</span> <span class="kt">long</span><span class="p">)</span><span class="n">data_offset</span><span class="p">);</span>
+
+    <span class="c1">// 4) seek to first hole</span>
+
+    <span class="kt">off_t</span> <span class="n">hole_offset</span><span class="p">;</span>
+
+    <span class="n">hole_offset</span> <span class="o">=</span> <span class="n">lseek</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">SEEK_HOLE</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">hole_offset</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;get hole offset fail</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">5</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;first hole offset of file %s is %lld</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">filename</span><span class="p">,</span> <span class="p">(</span><span class="kt">long</span> <span class="kt">long</span><span class="p">)</span><span class="n">hole_offset</span><span class="p">);</span>
+
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>执行结果：</p>
+<div class="highlight-c"><div class="highlight"><pre>// 要使用 GNU 扩展来支持 SEEK_DATA 和 SEEK_HOLE
+
+$ gcc 3-seek-data-and-hole.c -D_GNU_SOURCE -o 3-seek-data-and-hole.out
+
+// 读入并分析一个带空洞的文件
+
+$ ./3-seek-data-and-hole.out test-3-hole
+first data offset of file test-3-hole is 0
+first hole offset of file test-3-hole is 275
+
+// 被读入的带空洞文件
+
+$ od -c test-3-hole
+0000000   a   b   c   d   e   f   g  \0  \0  \0  \0  \0  \0  \0  \0  \0
+0000020  \0  \0  \0  \0  \0  \0  \0  \0  \0  \0  \0  \0  \0  \0  \0  \0
+*
+0000400  \0  \0  \0  \0  \0  \0  \0  \0   h   e   l   l   o       m   o
+0000420   t   o  \0
+0000423
+</pre></div>
+</div>
+<p>注意，程序打印的首个空洞的位置是错误的， <code class="docutils literal"><span class="pre">275</span></code> 是文件的末尾，但并不是第一个空洞，
+另外，程序的首个数据位置似乎是正确的，但这只是个巧合！</p>
+<p>实际上， Linux 并不支持真正的 <code class="docutils literal"><span class="pre">SEEK_DATA</span></code> 和 <code class="docutils literal"><span class="pre">SEEK_HOLE</span></code> 选项：
+<code class="docutils literal"><span class="pre">SEEK_DATA</span></code> 总是将整个文件看作是数据，所以首个数据偏移量总是 <code class="docutils literal"><span class="pre">0</span></code> ，
+而 <code class="docutils literal"><span class="pre">SEEK_HOLE</span></code> 总是指向文件末尾。</p>
+<p>具体请参考 <a class="reference external" href="http://lists.freebsd.org/pipermail/freebsd-fs/2011-September/012340.html">http://lists.freebsd.org/pipermail/freebsd-fs/2011-September/012340.html</a> 。</p>
+</div>
+<div class="section" id="id10">
+<h2>文件共享<a class="headerlink" href="#id10" title="Permalink to this headline">¶</a></h2>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">以下说明是概念性的，和实际实现不一定匹配。</p>
+</div>
+<p>内核使用三种数据结构表示打开的文件：</p>
+<ol class="arabic">
+<li><p class="first">每个进程在进程表中都有一个记录项，记录项中包含一张<strong>文件描述符表</strong>（file descriptor table），每个描述符占用一项。与每个文件描述符相关联的是：</p>
+<blockquote>
+<div><ol class="loweralpha simple">
+<li>文件描述符标识（ <code class="docutils literal"><span class="pre">close_on_exec</span></code> ）</li>
+<li>指向一个文件表项的指针</li>
+</ol>
+</div></blockquote>
+</li>
+<li><p class="first">内核为所有打开文件维持一张<strong>打开文件表</strong>（open file table ，简称文件表），每个文件表项包含：</p>
+<blockquote>
+<div><ol class="loweralpha simple">
+<li>文件状态标识（读、写、追加、同步和非阻塞等标识）</li>
+<li>当前文件偏移量</li>
+<li>指向该文件 v 节点表项的指针</li>
+</ol>
+</div></blockquote>
+</li>
+<li><p class="first">每个打开文件（或设备）都有一个<strong>v 节点</strong>（v-node ，虚拟节点），它包含了文件类型和对次文件进行各种操作的函数指针。对于大多数文件， v 节点还包含了该文件的 i 节点（i-node ，索引节点）， i 节点包含了文件的所有者、文件长度、文件所在的设备，文件在磁盘块上的位置指针，等等。</p>
+</li>
+</ol>
+<p>这些信息是在打开文件时从磁盘上读入内存的，所以所有关于文件的信息都是快速可供使用的。</p>
+<p>以下图片展示了一个打开两个文件的进程：</p>
+<img alt="../../_images/share-file-1.png" src="../../_images/share-file-1.png" />
+<p>下图是另一个例子 —— 两个不同的进程打开了一个相同的文件，两个进程各自拥有自己所对应的文件表：</p>
+<img alt="../../_images/share-file-2.png" src="../../_images/share-file-2.png" />
+<p>当进行多进程编程时，多个父子进程打开相同的文件表也是可能的：</p>
+<img alt="../../_images/share-file-3.png" src="../../_images/share-file-3.png" />
+<p>在给出这些结构之后，现在可以对前面的操作做进一步说明：</p>
+<ul class="simple">
+<li>在完成每个 <code class="docutils literal"><span class="pre">write</span></code> 之后，在文件表想中的当前文件偏移量即增加所写的字节数。如果当前文件偏移量超过了当前文件长度，那么 i 节点表项中的当前文件长度被更新为当前文件偏移量（也即是，该文件加长了）。</li>
+<li>如果用 <code class="docutils literal"><span class="pre">O_APPEND</span></code> 标识打开了一个文件，则相应标识也被设置到文件表象的文件状态标志中。每次在带有 <code class="docutils literal"><span class="pre">O_APPEND</span></code> 的写操作执行时，文件表象中的当前文件偏移量就被更新为 i 节点表表项中的文件长度。这使得每次写的数据都添加到文件的末尾。</li>
+<li><code class="docutils literal"><span class="pre">lseek</span></code> 操作修改文件表项中的当前文件偏移量，它并不执行任何 I/O 操作。</li>
+</ul>
+</div>
+<div class="section" id="id11">
+<h2>原子性的追加操作<a class="headerlink" href="#id11" title="Permalink to this headline">¶</a></h2>
+<p>当多个进程打开同一个文件时，一些意料之外的情况就可能发生。</p>
+<p>一个常见的错误时，一个进程的写入内容覆盖了另一个进程的写入内容。</p>
+<p>假设有两个进程，它们对同一个文件执行以下代码：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">lseek</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">SEEK_END</span><span class="p">);</span>
+
+<span class="n">write</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">BUF_SIZE</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>初看上去，程序会先移动到文件末尾，然后对其写入 <code class="docutils literal"><span class="pre">buf</span></code> 中的内容。但是，考虑以下执行顺序：</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="46%" />
+<col width="54%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">进程 A</th>
+<th class="head">进程 B</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">lseek(fd,</span> <span class="pre">0,</span> <span class="pre">SEEK_END);</span></code></td>
+<td>&nbsp;</td>
+</tr>
+<tr class="row-odd"><td>&nbsp;</td>
+<td><code class="docutils literal"><span class="pre">lseek(fd,</span> <span class="pre">0,</span> <span class="pre">SEEK_END);</span></code></td>
+</tr>
+<tr class="row-even"><td>&nbsp;</td>
+<td><code class="docutils literal"><span class="pre">write(fd,</span> <span class="pre">buf,</span> <span class="pre">BUF_SIZE);</span></code></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">write(fd,</span> <span class="pre">buf,</span> <span class="pre">BUF_SIZE);</span></code></td>
+<td>&nbsp;</td>
+</tr>
+</tbody>
+</table>
+<p>当进程 A 执行完 <code class="docutils literal"><span class="pre">lseek</span></code> 之后，它将自己的文件表偏移量设置为旧的末端长度 <code class="docutils literal"><span class="pre">old_end</span></code> 。</p>
+<p>这时进程 B 开始运行，它同样将自己的文件表偏移量设置为 <code class="docutils literal"><span class="pre">old_end</span></code> ，然后执行 <code class="docutils literal"><span class="pre">write</span></code> ，
+当写操作执行完之后， v 节点表的当前长度被更新为 <code class="docutils literal"><span class="pre">old_end</span></code> 加上 <code class="docutils literal"><span class="pre">write</span></code> 写入的字节数。</p>
+<p>然后进程 A 恢复执行，当它调用 <code class="docutils literal"><span class="pre">write</span></code> 时，进程 B 写入的内容就会被覆盖。</p>
+<p>我们称这种情况为“在写操作中包含了竞争条件”。</p>
+<p>要避免这种情况，我们需要使用 <code class="docutils literal"><span class="pre">O_APPEND</span></code> 来打开文件，确保每次更新表尾偏移量和写入会原子性地执行，
+这样就不需要 <code class="docutils literal"><span class="pre">lseek</span></code> ，从而也就避免了竞争条件。</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">任何一个需要多个函数调用的操作都不可能是原子操作，因为在两个函数调用之间，内核有可能会临时挂起该进程。</p>
+</div>
+<div class="admonition tip">
+<p class="first admonition-title">Tip</p>
+<p class="last">原子操作（atomic operation）值的是由多部组成的操作。如果该操作原子性地执行，则要么执行完所有步骤，要么一步也不执行，不可能只执行所有步骤的一个子集。</p>
+</div>
+</div>
+<div class="section" id="id12">
+<h2>原子性的文件创建操作<a class="headerlink" href="#id12" title="Permalink to this headline">¶</a></h2>
+<p>在创建新文件时，也可能会引发竞争条件。</p>
+<p>考虑以下代码：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="k">if</span> <span class="p">((</span><span class="n">open</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">O_WRONLY</span><span class="p">)</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>  <span class="o">&amp;&amp;</span> <span class="p">(</span><span class="n">errno</span> <span class="o">==</span> <span class="n">ENOENT</span><span class="p">))</span> <span class="p">{</span>
+    <span class="c1">// file not exists</span>
+    <span class="n">fd</span> <span class="o">=</span> <span class="n">creat</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">mode</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>以上代码尝试以只读模式打开一个文件，如果文件并不存在，那么它就创建一个新文件。</p>
+<p>不过，这段代码也不是原子操作，考虑以下这个执行顺序：</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="43%" />
+<col width="57%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">进程 A</th>
+<th class="head">进程 B</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">open(file,</span> <span class="pre">O_RDONLY);</span></code></td>
+<td>&nbsp;</td>
+</tr>
+<tr class="row-odd"><td>&nbsp;</td>
+<td><code class="docutils literal"><span class="pre">open(file,</span> <span class="pre">O_RDONLY);</span></code></td>
+</tr>
+<tr class="row-even"><td>&nbsp;</td>
+<td><code class="docutils literal"><span class="pre">fd</span> <span class="pre">=</span> <span class="pre">creat(file,</span> <span class="pre">mode);</span></code></td>
+</tr>
+<tr class="row-odd"><td>&nbsp;</td>
+<td><code class="docutils literal"><span class="pre">write(fd,</span> <span class="pre">buf,</span> <span class="pre">BUF_SIZE);</span></code></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">fd</span> <span class="pre">=</span> <span class="pre">creat(file,</span> <span class="pre">mode);</span></code></td>
+<td>&nbsp;</td>
+</tr>
+</tbody>
+</table>
+<p>当进程 A 检测到文件不存在之后， 进程 B 执行，创建一个同名的文件，并写入数据，
+这时进程 A 回复写入，并创建同名的新文件，进程 B 写入的数据就会被清理掉。</p>
+<p>要原子性地创建文件，可以调用 <code class="docutils literal"><span class="pre">open</span></code> 函数，配合 <code class="docutils literal"><span class="pre">O_EXCL</span></code> 和 <code class="docutils literal"><span class="pre">O_CREAT</span></code> 选项，
+具体的示例可以参见前面对 <code class="docutils literal"><span class="pre">O_EXCL</span></code> 选项的讨论。</p>
+</div>
+<div class="section" id="id13">
+<h2>原子性读/写给定偏移量<a class="headerlink" href="#id13" title="Permalink to this headline">¶</a></h2>
+<p><code class="docutils literal"><span class="pre">pread</span></code> 和 <code class="docutils literal"><span class="pre">pwrite</span></code> 允许程序对文件的特定偏移量进行原子性的读/写：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#include &lt;unistd.h&gt;</span>
+
+<span class="kt">ssize_t</span> <span class="nf">pread</span><span class="p">(</span><span class="kt">int</span> <span class="n">fd</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">buf</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">count</span><span class="p">,</span> <span class="kt">off_t</span> <span class="n">offset</span><span class="p">);</span>
+
+<span class="kt">ssize_t</span> <span class="nf">pwrite</span><span class="p">(</span><span class="kt">int</span> <span class="n">fd</span><span class="p">,</span> <span class="k">const</span> <span class="kt">void</span> <span class="o">*</span><span class="n">buf</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">count</span><span class="p">,</span> <span class="kt">off_t</span> <span class="n">offset</span><span class="p">);</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">fd</span></code> 、 <code class="docutils literal"><span class="pre">buf</span></code> 和 <code class="docutils literal"><span class="pre">count</span></code> 参数的作用和 <code class="docutils literal"><span class="pre">read</span></code> / <code class="docutils literal"><span class="pre">write</span></code> 相同。</p>
+<p><code class="docutils literal"><span class="pre">offset</span></code> 参数指定读/写开始的偏移量，因为没有类似于 <code class="docutils literal"><span class="pre">lseek</span></code> 的 <code class="docutils literal"><span class="pre">whence</span></code> 参数，所以 <code class="docutils literal"><span class="pre">offset</span></code> 总是以文件头为开始的绝对偏移量。</p>
+<p><code class="docutils literal"><span class="pre">pread</span></code> 和 <code class="docutils literal"><span class="pre">read</span></code> 、 <code class="docutils literal"><span class="pre">pwrite</span></code> 和 <code class="docutils literal"><span class="pre">write</span></code> 的区别是：</p>
+<ol class="arabic simple">
+<li><code class="docutils literal"><span class="pre">pread</span></code> 和 <code class="docutils literal"><span class="pre">pwrite</span></code> 移动到 <code class="docutils literal"><span class="pre">offset</span></code> 参数所指定的偏移量，然后开始执行读/写操作 —— 这一过程是原子性的，无法被中断。</li>
+<li><code class="docutils literal"><span class="pre">pread</span></code> 和 <code class="docutils literal"><span class="pre">pwrite</span></code> 执行之后并不修改文件的当前偏移量。比如说 <code class="docutils literal"><span class="pre">read(fd,</span> <span class="pre">buf,</span> <span class="pre">10)</span></code> 调用之后，文件的当前偏移量最多会向后移动 <code class="docutils literal"><span class="pre">10</span></code> 字节，但是 <code class="docutils literal"><span class="pre">pread(fd,</span> <span class="pre">buf,</span> <span class="pre">10,</span> <span class="pre">offset)</span></code> 调用之后，文件的当前偏移量还是和调用之前一样。</li>
+</ol>
+<p><code class="docutils literal"><span class="pre">pread</span></code> 等同于原子性地执行的以下函数调用：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="kt">off_t</span> <span class="n">orig</span><span class="p">;</span>
+
+<span class="n">orig</span> <span class="o">=</span> <span class="n">lseek</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">SEEK_CUR</span><span class="p">);</span>      <span class="c1">// save origin offset</span>
+
+<span class="n">lseek</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">offset</span><span class="p">,</span> <span class="n">SEEK_SET</span><span class="p">);</span>
+<span class="n">s</span> <span class="o">=</span> <span class="n">read</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">len</span><span class="p">);</span>
+
+<span class="n">lseek</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">orig</span><span class="p">,</span> <span class="n">SEEK_SET</span><span class="p">);</span>          <span class="c1">// restore origin offset</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">pwrite</span></code> 的定义也是类似的。</p>
+<p><code class="docutils literal"><span class="pre">pwrite</span></code> 和 <code class="docutils literal"><span class="pre">pread</span></code> 主要用于多进程编程时，多个父子进程共享同一个文件表，以及在多线程编程时，多个线程共享同一个文件描述符表时，执行不受其他进程/线程干扰的、无锁的、对特定 <code class="docutils literal"><span class="pre">offset</span></code> 上的读/写操作。</p>
+<p>以下程序演示了 <code class="docutils literal"><span class="pre">pread</span></code> 的调用：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// 3-pread.c</span>
+
+<span class="cp">#include &lt;unistd.h&gt;</span>
+<span class="cp">#include &lt;stdio.h&gt;</span>
+<span class="cp">#include &lt;fcntl.h&gt;</span>
+<span class="cp">#include &lt;sys/types.h&gt;</span>
+<span class="cp">#include &lt;sys/stat.h&gt;</span>
+
+<span class="cp">#define BUF_SIZE 1024</span>
+
+<span class="cp">#define READ_SIZE 10</span>
+
+<span class="kt">off_t</span> <span class="nf">get_current_offset</span><span class="p">(</span><span class="kt">int</span> <span class="n">fd</span><span class="p">);</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">argv</span><span class="p">[])</span> <span class="p">{</span>
+
+    <span class="c1">// 1) check argument</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">argc</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;usage: ./a.out file</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+
+
+    <span class="c1">// 2) open file</span>
+
+    <span class="kt">char</span> <span class="o">*</span><span class="n">filename</span> <span class="o">=</span> <span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">];</span>
+
+    <span class="kt">int</span> <span class="n">fd</span> <span class="o">=</span> <span class="n">open</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">O_RDONLY</span><span class="p">);</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">fd</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;open file %s fail</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">filename</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">2</span><span class="p">;</span>
+    <span class="p">}</span>
+
+
+    <span class="c1">// 3) read</span>
+
+    <span class="kt">off_t</span> <span class="n">before_read_offset</span> <span class="o">=</span> <span class="n">get_current_offset</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>
+
+    <span class="kt">char</span> <span class="n">buf</span><span class="p">[</span><span class="n">BUF_SIZE</span><span class="p">];</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">read</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">READ_SIZE</span><span class="p">)</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;read fail</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">3</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="kt">off_t</span> <span class="n">after_read_offset</span> <span class="o">=</span> <span class="n">get_current_offset</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>
+
+    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;after read %d bytes from file, offset move from %lld to %lld</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span>
+           <span class="n">READ_SIZE</span><span class="p">,</span>
+           <span class="p">(</span><span class="kt">long</span> <span class="kt">long</span><span class="p">)</span><span class="n">before_read_offset</span><span class="p">,</span>
+           <span class="p">(</span><span class="kt">long</span> <span class="kt">long</span><span class="p">)</span><span class="n">after_read_offset</span><span class="p">);</span>
+
+
+    <span class="c1">// 4) pread</span>
+
+    <span class="kt">off_t</span> <span class="n">before_pread_offset</span> <span class="o">=</span> <span class="n">get_current_offset</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">pread</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">READ_SIZE</span><span class="p">,</span> <span class="n">before_pread_offset</span><span class="p">)</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;pread fail</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">4</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="kt">off_t</span> <span class="n">after_pread_offset</span> <span class="o">=</span> <span class="n">get_current_offset</span><span class="p">(</span><span class="n">fd</span><span class="p">);</span>
+
+    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;after pread %d bytes from file, offset move from %lld to %lld</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span>
+           <span class="n">READ_SIZE</span><span class="p">,</span>
+           <span class="p">(</span><span class="kt">long</span> <span class="kt">long</span><span class="p">)</span><span class="n">before_pread_offset</span><span class="p">,</span>
+           <span class="p">(</span><span class="kt">long</span> <span class="kt">long</span><span class="p">)</span><span class="n">after_pread_offset</span><span class="p">);</span>
+
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">off_t</span> <span class="nf">get_current_offset</span><span class="p">(</span><span class="kt">int</span> <span class="n">fd</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">lseek</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">SEEK_CUR</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>程序首先调用 <code class="docutils literal"><span class="pre">read</span></code> ，并打印调用之后的当前偏移量，
+然后再调用 <code class="docutils literal"><span class="pre">pread</span></code> ，再打印调用之后的当前偏移量。</p>
+<p>对比可以看出， <code class="docutils literal"><span class="pre">read</span></code> 修改了文件的当前偏移量，而 <code class="docutils literal"><span class="pre">pread</span></code> 则没有：</p>
+<div class="highlight-c"><div class="highlight"><pre>$ ./3-pread.out 3-pread.c
+after read 10 bytes from file, offset move from 0 to 10
+after pread 10 bytes from file, offset move from 10 to 10
+</pre></div>
+</div>
+</div>
+<div class="section" id="id14">
+<h2>复制文件描述符<a class="headerlink" href="#id14" title="Permalink to this headline">¶</a></h2>
+<p>以下函数可以用于复制一个文件描述符：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#include &lt;unistd.h&gt;</span>
+
+<span class="kt">int</span> <span class="nf">dup</span><span class="p">(</span><span class="kt">int</span> <span class="n">oldfd</span><span class="p">);</span>
+<span class="kt">int</span> <span class="nf">dup2</span><span class="p">(</span><span class="kt">int</span> <span class="n">oldfd</span><span class="p">,</span> <span class="kt">int</span> <span class="n">newfd</span><span class="p">);</span>
+
+<span class="cp">#define _GNU_SOURCE             </span><span class="cm">/* See feature_test_macros(7) */</span><span class="cp"></span>
+<span class="cp">#include &lt;fcntl.h&gt;              </span><span class="cm">/* Obtain O_* constant definitions */</span><span class="cp"></span>
+<span class="cp">#include &lt;unistd.h&gt;</span>
+
+<span class="kt">int</span> <span class="nf">dup3</span><span class="p">(</span><span class="kt">int</span> <span class="n">oldfd</span><span class="p">,</span> <span class="kt">int</span> <span class="n">newfd</span><span class="p">,</span> <span class="kt">int</span> <span class="n">flags</span><span class="p">);</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">dup</span></code> 复制 <code class="docutils literal"><span class="pre">oldfd</span></code> ，并返回一个最小可用描述符。</p>
+<p><code class="docutils literal"><span class="pre">dup2</span></code> 复制 <code class="docutils literal"><span class="pre">oldfd</span></code> 为 <code class="docutils literal"><span class="pre">newfd</span></code> ，但是：</p>
+<ul class="simple">
+<li>如果 <code class="docutils literal"><span class="pre">newfd</span></code> 已存在，那么先关闭它。</li>
+<li>如果 <code class="docutils literal"><span class="pre">newfd</span> <span class="pre">==</span> <span class="pre">oldfd</span></code> ，那么 <code class="docutils literal"><span class="pre">dup2</span></code> 不做任何事，也不关闭 <code class="docutils literal"><span class="pre">newfd</span></code> 。</li>
+</ul>
+<p>以上两个函数创建出来的描述符都不共享 <code class="docutils literal"><span class="pre">close-on-excl</span></code> 标志，复制出的描述符都关闭了这个标志。</p>
+<p><code class="docutils literal"><span class="pre">dup3</span></code> 作用和 <code class="docutils literal"><span class="pre">dup2</span></code> 类似，但是：</p>
+<ul class="simple">
+<li>如果 <code class="docutils literal"><span class="pre">oldfd</span> <span class="pre">==</span> <span class="pre">newfd</span></code> ，那么引发错误 <code class="docutils literal"><span class="pre">EINVAL</span></code> 。</li>
+<li><code class="docutils literal"><span class="pre">dup3</span></code> 可以通过指定参数 <code class="docutils literal"><span class="pre">flags</span></code> 为 <code class="docutils literal"><span class="pre">O_CLOEXEC</span></code> 而强制为复制出的描述符打开 <code class="docutils literal"><span class="pre">close-on-exec</span></code> 标志。</li>
+</ul>
+<p>以上两个函数成功调用之后，
+新创建的 <code class="docutils literal"><span class="pre">newfd</span></code> 和原来的 <code class="docutils literal"><span class="pre">oldfd</span></code> 通过共享文件描述符项，从而实现文件偏移量、以及文件状态标识的共享。
+在逻辑上， <code class="docutils literal"><span class="pre">newfd</span></code>  和 <code class="docutils literal"><span class="pre">oldfd</span></code> 是可互换的（interchangeably）。</p>
+<p>以下代码演示了如何用三个不同的函数来复制标准输出：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// 3-dup.c</span>
+
+<span class="cp">#include &lt;unistd.h&gt;</span>
+<span class="cp">#include &lt;stdio.h&gt;</span>
+<span class="cp">#include &lt;fcntl.h&gt;</span>
+<span class="cp">#include &lt;unistd.h&gt;</span>
+
+<span class="kt">void</span> <span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+   
+    <span class="c1">// 1) dup</span>
+
+    <span class="kt">int</span> <span class="n">d1</span> <span class="o">=</span> <span class="n">dup</span><span class="p">(</span><span class="n">STDIN_FILENO</span><span class="p">);</span>
+
+    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;file descriptor duplicated by dup, number = %d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">d1</span><span class="p">);</span>
+
+  
+    <span class="c1">// 2) dup2</span>
+
+    <span class="kt">int</span> <span class="n">newfd</span> <span class="o">=</span> <span class="mi">123</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">d2</span> <span class="o">=</span> <span class="n">dup2</span><span class="p">(</span><span class="n">STDIN_FILENO</span><span class="p">,</span> <span class="n">newfd</span><span class="p">);</span>
+
+    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;file descriptor duplicated by dup2 with newfd %d, number = %d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">newfd</span><span class="p">,</span> <span class="n">d2</span><span class="p">);</span>
+
+
+    <span class="c1">// 3) dup4</span>
+
+    <span class="kt">int</span> <span class="n">newfd_2</span> <span class="o">=</span> <span class="mi">456</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">d3</span><span class="o">=</span> <span class="n">dup3</span><span class="p">(</span><span class="n">STDIN_FILENO</span><span class="p">,</span> <span class="n">newfd_2</span><span class="p">,</span> <span class="n">O_CLOEXEC</span><span class="p">);</span>
+
+    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;file descriptor duplicated by dup3 with newfd %d, number = %d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">newfd_2</span><span class="p">,</span> <span class="n">d3</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>执行结果：</p>
+<div class="highlight-c"><div class="highlight"><pre>$ ./3-dup.out
+file descriptor duplicated by dup, number = 3
+file descriptor duplicated by dup2 with newfd 123, number = 123
+file descriptor duplicated by dup3 with newfd 456, number = 456
+</pre></div>
+</div>
+</div>
+<div class="section" id="id15">
+<h2>保存文件到磁盘<a class="headerlink" href="#id15" title="Permalink to this headline">¶</a></h2>
+<p>为了提高 I/O 性能，当 <code class="docutils literal"><span class="pre">write</span></code> 等函数执行之后，写入的内容通常只是写入到了一个内存中的缓存中，并没有真正地写入到磁盘，
+在一段时间间隔之后，或者缓存写满之后，缓存中的数据才会被推入输出队列。</p>
+<p>而输出队列又等到缓存到达队首时，才真正地将缓存写入到磁盘。</p>
+<p>如果数据在等待写入的这段时间，机器因为发生故障而停机，那么就会发生数据丢失。</p>
+<p>对于数据库这类、在写入之后必须第一时间将数据保存到磁盘中的程序来说，必须需要使用 <code class="docutils literal"><span class="pre">fsync</span></code> 或 <code class="docutils literal"><span class="pre">fdatasync</span></code> 函数：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#include &lt;unistd.h&gt;</span>
+
+<span class="kt">int</span> <span class="nf">fsync</span><span class="p">(</span><span class="kt">int</span> <span class="n">fd</span><span class="p">);</span>
+
+<span class="kt">int</span> <span class="nf">fdatasync</span><span class="p">(</span><span class="kt">int</span> <span class="n">fd</span><span class="p">);</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">fsync</span></code> 将指定 <code class="docutils literal"><span class="pre">fd</span></code> 上的文件数据、以及文件的属性保存到磁盘中，并阻塞直到保存完成。</p>
+<p><code class="docutils literal"><span class="pre">fdatasync</span></code> 和 <code class="docutils literal"><span class="pre">fsync</span></code> 的作用类似，但是它只保证数据本身被保存到磁盘，但并不同步更新文件的属性（metadata，比如文件的被修改时间，以及文件的大小，等等），对于无须确保文件属性被同步写入的程序，这个调用的性能比同步 <code class="docutils literal"><span class="pre">fsync</span></code>  稍高一些。</p>
+<p>还有一个条件更弱的调用 —— <code class="docutils literal"><span class="pre">sync</span></code> ，它只要求将所有修改过的块缓存区（包括文件数据和文件属性）排入到写队列，然后就返回，它并不等待实际写磁盘操作结束：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#include &lt;unistd.h&gt;</span>
+
+<span class="kt">void</span> <span class="nf">sync</span><span class="p">(</span><span class="kt">void</span><span class="p">);</span>
+
+<span class="kt">int</span> <span class="nf">syncfs</span><span class="p">(</span><span class="kt">int</span> <span class="n">fd</span><span class="p">);</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">syncfs</span></code> 函数用于只对 <code class="docutils literal"><span class="pre">fd</span></code> （而不是所有打开文件）执行 <code class="docutils literal"><span class="pre">sync</span></code> 所要求的动作。</p>
+</div>
+<div class="section" id="todo-fcntl">
+<h2>TODO FCNTL 笔记<a class="headerlink" href="#todo-fcntl" title="Permalink to this headline">¶</a></h2>
+</div>
+<div class="section" id="todo-ioctl">
+<h2>TODO IOCTL 笔记<a class="headerlink" href="#todo-ioctl" title="Permalink to this headline">¶</a></h2>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">第 3 章：文件 I/O</a><ul>
+<li><a class="reference internal" href="#id1">文件描述符</a></li>
+<li><a class="reference internal" href="#id2">打开文件</a></li>
+<li><a class="reference internal" href="#open-o-creat-o-excl">open 函数的 O_CREAT 和 O_EXCL 参数</a></li>
+<li><a class="reference internal" href="#open">open 的返回值</a></li>
+<li><a class="reference internal" href="#creat">用 creat 函数创建文件</a></li>
+<li><a class="reference internal" href="#id3">关闭文件</a></li>
+<li><a class="reference internal" href="#id4">文件写入</a></li>
+<li><a class="reference internal" href="#id5">读文件</a></li>
+<li><a class="reference internal" href="#id6">文件偏移量</a></li>
+<li><a class="reference internal" href="#id7">设置文件偏移量</a></li>
+<li><a class="reference internal" href="#id8">获取当前偏移量</a></li>
+<li><a class="reference internal" href="#id9">文件空洞</a></li>
+<li><a class="reference internal" href="#seek-data-seek-hole">SEEK_DATA 和 SEEK_HOLE</a></li>
+<li><a class="reference internal" href="#id10">文件共享</a></li>
+<li><a class="reference internal" href="#id11">原子性的追加操作</a></li>
+<li><a class="reference internal" href="#id12">原子性的文件创建操作</a></li>
+<li><a class="reference internal" href="#id13">原子性读/写给定偏移量</a></li>
+<li><a class="reference internal" href="#id14">复制文件描述符</a></li>
+<li><a class="reference internal" href="#id15">保存文件到磁盘</a></li>
+<li><a class="reference internal" href="#todo-fcntl">TODO FCNTL 笔记</a></li>
+<li><a class="reference internal" href="#todo-ioctl">TODO IOCTL 笔记</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="use-code.html"
+                        title="previous chapter">源码的编译和使用</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="chp4.html"
+                        title="next chapter">第 4 章：文件和目录</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

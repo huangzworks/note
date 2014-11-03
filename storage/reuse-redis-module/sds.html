@@ -1,0 +1,266 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>SDS 模块 &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="up" title="重用 Redis 模块" href="index.html" />
+    <link rel="next" title="双端链表" href="adlist.html" />
+    <link rel="prev" title="重用 Redis 模块" href="index.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="adlist.html" title="双端链表"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="重用 Redis 模块"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">重用 Redis 模块</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="sds">
+<h1>SDS 模块<a class="headerlink" href="#sds" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="id1">
+<h2>适用范围<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h2>
+<p>SDS 模块构建了一个字符串对象抽象，
+这个抽象字符串具有以下特性：</p>
+<ol class="arabic simple">
+<li>内容可以是二进制安全的</li>
+<li>可以在 <img class="math" src="../../_images/math/87179e0d3fbdda1c2b257b186368b665fe0d2b5e.png" alt="O(1)"/> 复杂度内取出字符串的长度</li>
+<li>通过预分配内存来减少连续的追加（append）操作所需的内存重分配次数</li>
+</ol>
+<p>如果你的程序需要以上这些特性，
+那么可以考虑重用 Redis 的这个 SDS 模块。</p>
+<p>SDS 模块的具体定义，以及操作 API ，可以参考 <a class="reference external" href="http://www.redisbook.com">《Redis 设计与实现》</a> 中的相关章节。</p>
+</div>
+<div class="section" id="id2">
+<h2>准备步骤<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<ol class="arabic simple">
+<li>从 Redis 源代码中复制 <code class="docutils literal"><span class="pre">sds.h</span></code> 、 <code class="docutils literal"><span class="pre">sds.c</span></code> 、 <code class="docutils literal"><span class="pre">zmalloc.h</span></code> 和 <code class="docutils literal"><span class="pre">zmalloc.c</span></code> 四个文件到新建文件夹。</li>
+<li>添加 <code class="docutils literal"><span class="pre">#include</span> <span class="pre">&lt;stddef.h&gt;</span></code> 到 <code class="docutils literal"><span class="pre">zamlloc.h</span></code> ，解决 <code class="docutils literal"><span class="pre">size_t</span></code> 未定义的问题。</li>
+<li>从 <code class="docutils literal"><span class="pre">zamlloc.c</span></code> 中移除 <code class="docutils literal"><span class="pre">#include</span> <span class="pre">&quot;config.h&quot;</span></code> ，因为现在已经不需要配置文件了。</li>
+</ol>
+</div>
+<div class="section" id="id3">
+<h2>测试驱动程序<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<p>以下驱动程序展示了如何使用 SDS 模块，
+并测试了其中的 <code class="docutils literal"><span class="pre">sdsnew</span></code> 、 <code class="docutils literal"><span class="pre">sdslen</span></code> 、 <code class="docutils literal"><span class="pre">sdsavail</span></code> 、 <code class="docutils literal"><span class="pre">sdsdup</span></code> 和 <code class="docutils literal"><span class="pre">sdscat</span></code> 等函数。</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// main.c</span>
+
+<span class="cp">#include &lt;assert.h&gt;</span>
+<span class="cp">#include &lt;string.h&gt;</span>
+<span class="cp">#include &quot;sds.h&quot;</span>
+
+<span class="kt">void</span> <span class="nf">create_sds_and_check_its_property</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">sds</span> <span class="n">s</span> <span class="o">=</span> <span class="n">sdsnew</span><span class="p">(</span><span class="s">&quot;hello&quot;</span><span class="p">);</span>
+
+    <span class="c1">// 验证长度</span>
+    <span class="n">assert</span><span class="p">(</span>
+        <span class="n">sdslen</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="o">==</span> <span class="mi">5</span>
+    <span class="p">);</span>
+
+    <span class="c1">// 验证空白位置</span>
+    <span class="n">assert</span><span class="p">(</span>
+        <span class="n">sdsavail</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span>
+    <span class="p">);</span>
+
+    <span class="c1">// 验证已有内容</span>
+    <span class="n">assert</span><span class="p">(</span>
+        <span class="n">memcmp</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="s">&quot;hello</span><span class="se">\0</span><span class="s">&quot;</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span>
+    <span class="p">);</span>
+
+    <span class="c1">// 释放</span>
+    <span class="n">sdsfree</span><span class="p">(</span><span class="n">s</span><span class="p">);</span>
+<span class="p">}</span>
+
+
+<span class="kt">void</span> <span class="nf">test_sdsdup</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">sds</span> <span class="n">s</span> <span class="o">=</span> <span class="n">sdsnew</span><span class="p">(</span><span class="s">&quot;hello&quot;</span><span class="p">);</span>
+
+    <span class="c1">// 创建 s 的一个副本</span>
+    <span class="n">sds</span> <span class="n">another</span> <span class="o">=</span> <span class="n">sdsdup</span><span class="p">(</span><span class="n">s</span><span class="p">);</span>
+
+    <span class="c1">// 长度对比</span>
+    <span class="n">assert</span><span class="p">(</span>
+        <span class="n">sdslen</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="o">==</span> <span class="n">sdslen</span><span class="p">(</span><span class="n">another</span><span class="p">)</span>
+    <span class="p">);</span>
+
+    <span class="c1">// 空间对比</span>
+    <span class="n">assert</span><span class="p">(</span>
+        <span class="n">sdsavail</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="o">==</span> <span class="n">sdsavail</span><span class="p">(</span><span class="n">another</span><span class="p">)</span>
+    <span class="p">);</span>
+
+    <span class="c1">// 内容对比</span>
+    <span class="n">assert</span><span class="p">(</span>
+        <span class="n">memcmp</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">another</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span>
+    <span class="p">);</span>
+
+    <span class="c1">// 释放</span>
+    <span class="n">sdsfree</span><span class="p">(</span><span class="n">s</span><span class="p">);</span>
+    <span class="n">sdsfree</span><span class="p">(</span><span class="n">another</span><span class="p">);</span>
+<span class="p">}</span>
+
+
+<span class="kt">void</span> <span class="nf">test_sdscat</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">const</span> <span class="kt">char</span> <span class="k">const</span> <span class="n">total</span><span class="p">[]</span> <span class="o">=</span> <span class="s">&quot;hello moto</span><span class="se">\0</span><span class="s">&quot;</span><span class="p">;</span>
+
+    <span class="n">sds</span> <span class="n">s</span> <span class="o">=</span> <span class="n">sdsnew</span><span class="p">(</span><span class="s">&quot;hello&quot;</span><span class="p">);</span>
+
+    <span class="c1">// 追加内容</span>
+    <span class="k">const</span> <span class="kt">char</span> <span class="k">const</span> <span class="n">append</span><span class="p">[]</span> <span class="o">=</span> <span class="s">&quot; moto&quot;</span><span class="p">;</span>
+    <span class="n">sdscat</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">append</span><span class="p">);</span>
+
+    <span class="c1">// 长度对比</span>
+    <span class="n">assert</span><span class="p">(</span>
+        <span class="n">sdslen</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="o">==</span> <span class="n">strlen</span><span class="p">(</span><span class="n">total</span><span class="p">)</span>
+    <span class="p">);</span>
+
+    <span class="c1">// 空间对比</span>
+    <span class="n">assert</span><span class="p">(</span>
+        <span class="c1">// 追加之后的字符串</span>
+        <span class="c1">// 会预留大小相当于现有字符串长度的空间</span>
+        <span class="n">sdsavail</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="o">==</span> <span class="n">sdslen</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+    <span class="p">);</span>
+
+    <span class="c1">// 内容对比</span>
+    <span class="n">assert</span><span class="p">(</span>
+        <span class="n">memcmp</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">total</span><span class="p">,</span> <span class="n">strlen</span><span class="p">(</span><span class="n">total</span><span class="p">)</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span>
+    <span class="p">);</span>
+
+    <span class="c1">// 释放空间</span>
+    <span class="n">sdsfree</span><span class="p">(</span><span class="n">s</span><span class="p">);</span>
+<span class="p">}</span>
+
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">create_sds_and_check_its_property</span><span class="p">();</span>
+
+    <span class="n">test_sdsdup</span><span class="p">();</span>
+
+    <span class="n">test_sdscat</span><span class="p">();</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id4">
+<h2>完整源码<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h2>
+<p>重用程序的完整代码可以在 <a class="reference external" href="https://github.com/huangz1990/blog/tree/master/storage/reuse-redis-module/code">这里</a> 的 <code class="docutils literal"><span class="pre">sds</span></code> 文件夹中找到。</p>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">SDS 模块</a><ul>
+<li><a class="reference internal" href="#id1">适用范围</a></li>
+<li><a class="reference internal" href="#id2">准备步骤</a></li>
+<li><a class="reference internal" href="#id3">测试驱动程序</a></li>
+<li><a class="reference internal" href="#id4">完整源码</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="index.html"
+                        title="previous chapter">重用 Redis 模块</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="adlist.html"
+                        title="next chapter">双端链表</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

@@ -1,0 +1,236 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>双链表 &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="up" title="Redis 源码分析" href="index.html" />
+    <link rel="next" title="字典" href="dict.html" />
+    <link rel="prev" title="Redis 源码分析" href="index.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="dict.html" title="字典"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="Redis 源码分析"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Redis 源码分析</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>双链表<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<p>链表是 Redis 的核心数据结构之一，它不仅大量应用在 Redis 自身内部的实现中，而且它也是 Redis 的 List 结构的底层实现之一。</p>
+<p>本文通过分析 Redis 源码里的 <code class="docutils literal"><span class="pre">adlist.h</span></code> 和 <code class="docutils literal"><span class="pre">adlist.c</span></code> ，了解链表结构的详细实现，籍此加深对 Redis 的理解。</p>
+<div class="section" id="id2">
+<h2>数据结构<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>Redis 的链表结构是一个典型的双端链表 <a class="reference external" href="http://en.wikipedia.org/wiki/Doubly_linked_list">doubly linked list</a> 实现。</p>
+<p>除了一个指向值的 <code class="docutils literal"><span class="pre">void</span></code> 指针外，链表中的每个节点都有两个方向指针，一个指向前驱节点，另一个指向后继节点：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="k">typedef</span> <span class="k">struct</span> <span class="n">listNode</span> <span class="p">{</span>
+    <span class="k">struct</span> <span class="n">listNode</span> <span class="o">*</span><span class="n">prev</span><span class="p">;</span>
+    <span class="k">struct</span> <span class="n">listNode</span> <span class="o">*</span><span class="n">next</span><span class="p">;</span>
+    <span class="kt">void</span> <span class="o">*</span><span class="n">value</span><span class="p">;</span>
+<span class="p">}</span> <span class="n">listNode</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>每个双端链表都被一个 <code class="docutils literal"><span class="pre">list</span></code> 结构包装起来， <code class="docutils literal"><span class="pre">list</span></code> 结构带有两个指针，一个指向双端链表的表头节点，另一个指向双端链表的表尾节点，这个特性使得 Redis 可以很方便地执行像 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/rpoplpush.html">RPOPLPUSH</a> 这样的命令：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="k">typedef</span> <span class="k">struct</span> <span class="n">list</span> <span class="p">{</span>
+    <span class="n">listNode</span> <span class="o">*</span><span class="n">head</span><span class="p">;</span>
+    <span class="n">listNode</span> <span class="o">*</span><span class="n">tail</span><span class="p">;</span>
+
+    <span class="kt">void</span> <span class="o">*</span><span class="p">(</span><span class="o">*</span><span class="n">dup</span><span class="p">)(</span><span class="kt">void</span> <span class="o">*</span><span class="n">ptr</span><span class="p">);</span>
+    <span class="kt">void</span> <span class="p">(</span><span class="o">*</span><span class="n">free</span><span class="p">)(</span><span class="kt">void</span> <span class="o">*</span><span class="n">ptr</span><span class="p">);</span>
+    <span class="kt">int</span> <span class="p">(</span><span class="o">*</span><span class="n">match</span><span class="p">)(</span><span class="kt">void</span> <span class="o">*</span><span class="n">ptr</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">key</span><span class="p">);</span>
+
+    <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">len</span><span class="p">;</span>
+<span class="p">}</span> <span class="n">list</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>链表结构中还有三个函数指针 <code class="docutils literal"><span class="pre">dup</span></code> 、 <code class="docutils literal"><span class="pre">free</span></code> 和 <code class="docutils literal"><span class="pre">match</span></code> ，这些指针指向那些用于处理不同类型值的函数。</p>
+<p>至于 <code class="docutils literal"><span class="pre">len</span></code> 属性，毫无疑问，就是链表节点数量计数器了。</p>
+<p>以下是双端链表和节点的一个示意图：</p>
+<img alt="../../_images/list_and_list_node.png" src="../../_images/list_and_list_node.png" />
+</div>
+<div class="section" id="list-listnode-api">
+<h2>list 结构和 listNode 结构的 API<a class="headerlink" href="#list-listnode-api" title="Permalink to this headline">¶</a></h2>
+<p><code class="docutils literal"><span class="pre">list</span></code> 和 <code class="docutils literal"><span class="pre">listNode</span></code> 都有它们自己的一簇 API ，这些 API 的实现都是典型的双端链表 API ，这里就不作详细的分析了。</p>
+<p>从名字上就可以大概地看出它们的作用：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">list</span> <span class="o">*</span><span class="nf">listCreate</span><span class="p">(</span><span class="kt">void</span><span class="p">);</span>
+<span class="kt">void</span> <span class="nf">listRelease</span><span class="p">(</span><span class="n">list</span> <span class="o">*</span><span class="n">list</span><span class="p">);</span>
+
+<span class="n">list</span> <span class="o">*</span><span class="nf">listAddNodeHead</span><span class="p">(</span><span class="n">list</span> <span class="o">*</span><span class="n">list</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">value</span><span class="p">);</span>
+<span class="n">list</span> <span class="o">*</span><span class="nf">listAddNodeTail</span><span class="p">(</span><span class="n">list</span> <span class="o">*</span><span class="n">list</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">value</span><span class="p">);</span>
+<span class="n">list</span> <span class="o">*</span><span class="nf">listInsertNode</span><span class="p">(</span><span class="n">list</span> <span class="o">*</span><span class="n">list</span><span class="p">,</span> <span class="n">listNode</span> <span class="o">*</span><span class="n">old_node</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">value</span><span class="p">,</span> <span class="kt">int</span> <span class="n">after</span><span class="p">);</span>
+<span class="kt">void</span> <span class="nf">listDelNode</span><span class="p">(</span><span class="n">list</span> <span class="o">*</span><span class="n">list</span><span class="p">,</span> <span class="n">listNode</span> <span class="o">*</span><span class="n">node</span><span class="p">);</span>
+
+<span class="n">list</span> <span class="o">*</span><span class="nf">listDup</span><span class="p">(</span><span class="n">list</span> <span class="o">*</span><span class="n">orig</span><span class="p">);</span>
+
+<span class="n">listNode</span> <span class="o">*</span><span class="nf">listSearchKey</span><span class="p">(</span><span class="n">list</span> <span class="o">*</span><span class="n">list</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">key</span><span class="p">);</span>
+<span class="n">listNode</span> <span class="o">*</span><span class="nf">listIndex</span><span class="p">(</span><span class="n">list</span> <span class="o">*</span><span class="n">list</span><span class="p">,</span> <span class="kt">long</span> <span class="n">index</span><span class="p">);</span>
+
+<span class="kt">void</span> <span class="nf">listRotate</span><span class="p">(</span><span class="n">list</span> <span class="o">*</span><span class="n">list</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>为了方便操作列表，源码中还定义了一组宏：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#define listLength(l) ((l)-&gt;len)</span>
+<span class="cp">#define listFirst(l) ((l)-&gt;head)</span>
+<span class="cp">#define listLast(l) ((l)-&gt;tail)</span>
+<span class="cp">#define listPrevNode(n) ((n)-&gt;prev)</span>
+<span class="cp">#define listNextNode(n) ((n)-&gt;next)</span>
+<span class="cp">#define listNodeValue(n) ((n)-&gt;value)</span>
+
+<span class="cp">#define listSetDupMethod(l,m) ((l)-&gt;dup = (m))</span>
+<span class="cp">#define listSetFreeMethod(l,m) ((l)-&gt;free = (m))</span>
+<span class="cp">#define listSetMatchMethod(l,m) ((l)-&gt;match = (m))</span>
+
+<span class="cp">#define listGetDupMethod(l) ((l)-&gt;dup)</span>
+<span class="cp">#define listGetFree(l) ((l)-&gt;free)</span>
+<span class="cp">#define listGetMatchMethod(l) ((l)-&gt;match)</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id3">
+<h2>迭代器<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<p>Redis 针对 <code class="docutils literal"><span class="pre">list</span></code> 结构实现了一个<a class="reference external" href="http://en.wikipedia.org/wiki/Iterator">迭代器</a> ，用于对链表进行遍历。</p>
+<p>这个迭代器的实现非常典型，它的结构定义如下：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="k">typedef</span> <span class="k">struct</span> <span class="n">listIter</span> <span class="p">{</span>
+    <span class="n">listNode</span> <span class="o">*</span><span class="n">next</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">direction</span><span class="p">;</span>  <span class="c1">// 指定迭代的方向（从前到后还是从后到前)</span>
+<span class="p">}</span> <span class="n">listIter</span><span class="p">;</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">direction</span></code> 决定迭代器是沿着 <code class="docutils literal"><span class="pre">next</span></code> 指针向后迭代，还是沿着 <code class="docutils literal"><span class="pre">prev</span></code> 指针向前迭代，这个值可以是 <code class="docutils literal"><span class="pre">adlist.h</span></code> 中的 <code class="docutils literal"><span class="pre">AL_START_HEAD</span></code> 常量或 <code class="docutils literal"><span class="pre">AL_START_TAIL</span></code> 常量：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#define AL_START_HEAD 0</span>
+<span class="cp">#define AL_START_TAIL 1</span>
+</pre></div>
+</div>
+<p>以下是迭代器所使用的 API ：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">listIter</span> <span class="o">*</span><span class="nf">listGetIterator</span><span class="p">(</span><span class="n">list</span> <span class="o">*</span><span class="n">list</span><span class="p">,</span> <span class="kt">int</span> <span class="n">direction</span><span class="p">);</span>
+<span class="n">listNode</span> <span class="o">*</span><span class="nf">listNext</span><span class="p">(</span><span class="n">listIter</span> <span class="o">*</span><span class="n">iter</span><span class="p">);</span>
+
+<span class="kt">void</span> <span class="nf">listReleaseIterator</span><span class="p">(</span><span class="n">listIter</span> <span class="o">*</span><span class="n">iter</span><span class="p">);</span>
+
+<span class="kt">void</span> <span class="nf">listRewind</span><span class="p">(</span><span class="n">list</span> <span class="o">*</span><span class="n">list</span><span class="p">,</span> <span class="n">listIter</span> <span class="o">*</span><span class="n">li</span><span class="p">);</span>
+<span class="kt">void</span> <span class="nf">listRewindTail</span><span class="p">(</span><span class="n">list</span> <span class="o">*</span><span class="n">list</span><span class="p">,</span> <span class="n">listIter</span> <span class="o">*</span><span class="n">li</span><span class="p">);</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id5">
+<h2>小结<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h2>
+<p>和以往不同，因为双端链表和链表迭代器都非常常见，所以这篇文章没有像往常一样，对实现源码作详细的分析，而是将注意力集中到数据结构的定义，以及 API 的展示上。</p>
+<p>如果对源码的细节感兴趣，可以到 GITHUB 上查看带注释的完整源码： <a class="reference external" href="https://github.com/huangz1990/reading_redis_source">https://github.com/huangz1990/reading_redis_source</a> 。</p>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">双链表</a><ul>
+<li><a class="reference internal" href="#id2">数据结构</a></li>
+<li><a class="reference internal" href="#list-listnode-api">list 结构和 listNode 结构的 API</a></li>
+<li><a class="reference internal" href="#id3">迭代器</a></li>
+<li><a class="reference internal" href="#id5">小结</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="index.html"
+                        title="previous chapter">Redis 源码分析</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="dict.html"
+                        title="next chapter">字典</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

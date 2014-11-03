@@ -1,0 +1,590 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Lua 脚本 &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="up" title="Redis 源码分析" href="index.html" />
+    <link rel="next" title="事件驱动" href="event-driven.html" />
+    <link rel="prev" title="SDS 结构" href="sds.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="event-driven.html" title="事件驱动"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="sds.html" title="SDS 结构"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Redis 源码分析</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="lua">
+<h1>Lua 脚本<a class="headerlink" href="#lua" title="Permalink to this headline">¶</a></h1>
+<p>通过对 Redis 源码中的 <code class="docutils literal"><span class="pre">scripting.c</span></code> 文件进行分析，解释 Lua 脚本功能的实现机制。</p>
+<div class="section" id="id1">
+<h2>预备知识<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h2>
+<p>因为脚本功能的实现源码和命令关系密切，最好在阅读这篇文章之前先了解 Redis 的脚本功能是如何使用的，否则你可能无法看明白这里的一些实现决策是如何做出的。</p>
+<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/script/eval.html">EVAL 命令的文档</a> 是学习使用脚本功能的一个很好起点。</p>
+</div>
+<div class="section" id="id2">
+<h2>脚本功能的实现<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>Redis 脚本功能的实现代码放在源码的 <code class="docutils literal"><span class="pre">src/scripting.c</span></code> 文件中，主要分为三部分：</p>
+<ol class="arabic simple">
+<li>Lua 嵌入 Redis</li>
+<li><code class="docutils literal"><span class="pre">EVAL</span></code> 和 <code class="docutils literal"><span class="pre">EVALSHA</span></code> 命令的实现</li>
+<li><code class="docutils literal"><span class="pre">SCRIPT</span></code> 命令的实现</li>
+</ol>
+<p>以下是这三个部分的详细说明。</p>
+</div>
+<div class="section" id="lua-redis">
+<h2>Lua 嵌入 Redis<a class="headerlink" href="#lua-redis" title="Permalink to this headline">¶</a></h2>
+<p>要在 Redis 中执行 Lua 脚本，必须先将 Lua 嵌入到 Redis 服务器端中，并且初始化 Lua 脚本的相关环境。</p>
+<p>在 <code class="docutils literal"><span class="pre">scripting.c</span></code> 中，以上工作是由 <code class="docutils literal"><span class="pre">scriptingInit</span></code> 函数完成的：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="kt">void</span> <span class="nf">scriptingInit</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// Lua 魔法从这里发生...</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">scriptingInit</span></code> 的工作包括以下：</p>
+<div class="section" id="id3">
+<h3>1. 创建新的 Lua 环境<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h3>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">lua_State</span> <span class="o">*</span><span class="n">lua</span> <span class="o">=</span> <span class="n">lua_open</span><span class="p">();</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">lua_open</span></code> 是一个 Lua 5.1 提供的 C API ，它用于创造一个新的 Lua 环境（environment/state）。</p>
+</div>
+<div class="section" id="id4">
+<h3>2. 载入函数包<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h3>
+<p>Redis 的 Lua 环境中提供了好几个常用的包，比如 <code class="docutils literal"><span class="pre">base</span></code> 、 <code class="docutils literal"><span class="pre">table</span></code> 、 <code class="docutils literal"><span class="pre">math</span></code> 和 <code class="docutils literal"><span class="pre">cjson</span></code> 等，这些包都在创建环境之后通过 <code class="docutils literal"><span class="pre">luaLoadLibraries</span></code> 函数载入：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">luaLoadLibraries</span><span class="p">(</span><span class="n">lua</span><span class="p">);</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="redis-lua">
+<h3>3. 移除不能暴露给 Redis 环境的 Lua 函数<a class="headerlink" href="#redis-lua" title="Permalink to this headline">¶</a></h3>
+<p>为了避免安全问题，一些带有特殊作用的函数，比如 <code class="docutils literal"><span class="pre">openfile</span></code> ，是不能暴露给执行 Redis 命令的 Lua 环境的，因此需要从 Lua 环境中移除这些函数：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">luaRemoveUnsupportedFunctions</span><span class="p">(</span><span class="n">lua</span><span class="p">);</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id5">
+<h3>4. 创建字典，用于保存脚本缓存<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h3>
+<p>被 <code class="docutils literal"><span class="pre">EVAL</span></code> 执行过的脚本，或者被 <code class="docutils literal"><span class="pre">SCRIPT</span> <span class="pre">LOAD</span></code> 命令载入过的脚本，都会被保存到 Redis 的服务器中，方便将来直接使用 <code class="docutils literal"><span class="pre">EVALSHA</span></code> 调用。</p>
+<p>所有的这些脚本都被缓存到一个字典中，根据脚本的 SHA1 校验和来进行索引。</p>
+<p><code class="docutils literal"><span class="pre">dictCreate</span></code> 创建了字典，并将它传给 <code class="docutils literal"><span class="pre">server.lua_scripts</span></code> 属性：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">server</span><span class="p">.</span><span class="n">lua_scripts</span> <span class="o">=</span> <span class="n">dictCreate</span><span class="p">(</span><span class="o">&amp;</span><span class="n">dbDictType</span><span class="p">,</span><span class="nb">NULL</span><span class="p">);</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="redis-table">
+<h3>5. 创建并设置 redis table<a class="headerlink" href="#redis-table" title="Permalink to this headline">¶</a></h3>
+<p>在 Redis 的 Lua 环境中，所有对 Redis 的工作都是通过调用 <code class="docutils literal"><span class="pre">redis.xxx</span></code> 这样的函数来完成的。</p>
+<p>比如执行在 Lua 中执行 Redis 命令，可以调用 <code class="docutils literal"><span class="pre">redis.call</span></code> 或者 <code class="docutils literal"><span class="pre">redis.pcall</span></code> 来完成。</p>
+<p>又或者，可以使用 <code class="docutils literal"><span class="pre">redis.log</span></code> 来记录日志。</p>
+<p>这些 Lua 函数都是通过以下语句来注册：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cm">/* Register the redis commands table and fields */</span>
+<span class="n">lua_newtable</span><span class="p">(</span><span class="n">lua</span><span class="p">);</span>
+
+<span class="cm">/* redis.call */</span>
+<span class="n">lua_pushstring</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="s">&quot;call&quot;</span><span class="p">);</span>
+<span class="n">lua_pushcfunction</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="n">luaRedisCallCommand</span><span class="p">);</span>
+<span class="n">lua_settable</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="o">-</span><span class="mi">3</span><span class="p">);</span>
+
+<span class="cm">/* redis.pcall */</span>
+<span class="n">lua_pushstring</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="s">&quot;pcall&quot;</span><span class="p">);</span>
+<span class="n">lua_pushcfunction</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="n">luaRedisPCallCommand</span><span class="p">);</span>
+<span class="n">lua_settable</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="o">-</span><span class="mi">3</span><span class="p">);</span>
+
+<span class="cm">/* redis.log and log levels. */</span>
+<span class="n">lua_pushstring</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="s">&quot;log&quot;</span><span class="p">);</span>
+<span class="n">lua_pushcfunction</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="n">luaLogCommand</span><span class="p">);</span>
+<span class="n">lua_settable</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="o">-</span><span class="mi">3</span><span class="p">);</span>
+
+<span class="n">lua_pushstring</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="s">&quot;LOG_DEBUG&quot;</span><span class="p">);</span>
+<span class="n">lua_pushnumber</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="n">REDIS_DEBUG</span><span class="p">);</span>
+<span class="n">lua_settable</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="o">-</span><span class="mi">3</span><span class="p">);</span>
+
+<span class="n">lua_pushstring</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="s">&quot;LOG_VERBOSE&quot;</span><span class="p">);</span>
+<span class="n">lua_pushnumber</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="n">REDIS_VERBOSE</span><span class="p">);</span>
+<span class="n">lua_settable</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="o">-</span><span class="mi">3</span><span class="p">);</span>
+
+<span class="n">lua_pushstring</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="s">&quot;LOG_NOTICE&quot;</span><span class="p">);</span>
+<span class="n">lua_pushnumber</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="n">REDIS_NOTICE</span><span class="p">);</span>
+<span class="n">lua_settable</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="o">-</span><span class="mi">3</span><span class="p">);</span>
+
+<span class="n">lua_pushstring</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="s">&quot;LOG_WARNING&quot;</span><span class="p">);</span>
+<span class="n">lua_pushnumber</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="n">REDIS_WARNING</span><span class="p">);</span>
+<span class="n">lua_settable</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="o">-</span><span class="mi">3</span><span class="p">);</span>
+
+<span class="cm">/* redis.sha1hex */</span>
+<span class="n">lua_pushstring</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span> <span class="s">&quot;sha1hex&quot;</span><span class="p">);</span>
+<span class="n">lua_pushcfunction</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span> <span class="n">luaRedisSha1hexCommand</span><span class="p">);</span>
+<span class="n">lua_settable</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span> <span class="o">-</span><span class="mi">3</span><span class="p">);</span>
+
+<span class="cm">/* Finally set the table as &#39;redis&#39; global var. */</span>
+<span class="n">lua_setglobal</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="s">&quot;redis&quot;</span><span class="p">);</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="math-table-random-randomseed">
+<h3>6. 覆盖 math table 中的 random 和 randomseed 函数<a class="headerlink" href="#math-table-random-randomseed" title="Permalink to this headline">¶</a></h3>
+<p>为了创建无副作用的脚本，Redis 使用修改过的 <code class="docutils literal"><span class="pre">random</span></code> 函数和 <code class="docutils literal"><span class="pre">randomseed</span></code> 函数，覆盖了原有的 <code class="docutils literal"><span class="pre">math</span></code> 包中的 <code class="docutils literal"><span class="pre">random</span></code> 和 <code class="docutils literal"><span class="pre">randomseed</span></code> 函数：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cm">/* Replace math.random and math.randomseed with our implementations. */</span>
+<span class="n">lua_getglobal</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="s">&quot;math&quot;</span><span class="p">);</span>
+
+<span class="n">lua_pushstring</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="s">&quot;random&quot;</span><span class="p">);</span>
+<span class="n">lua_pushcfunction</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="n">redis_math_random</span><span class="p">);</span>
+<span class="n">lua_settable</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="o">-</span><span class="mi">3</span><span class="p">);</span>
+
+<span class="n">lua_pushstring</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="s">&quot;randomseed&quot;</span><span class="p">);</span>
+<span class="n">lua_pushcfunction</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="n">redis_math_randomseed</span><span class="p">);</span>
+<span class="n">lua_settable</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="o">-</span><span class="mi">3</span><span class="p">);</span>
+
+<span class="n">lua_setglobal</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="s">&quot;math&quot;</span><span class="p">);</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id6">
+<h3>7. 创建辅助函数，用于排序<a class="headerlink" href="#id6" title="Permalink to this headline">¶</a></h3>
+<p>一些 Redis 命令，比如 <code class="docutils literal"><span class="pre">SMEMBERS</span></code> 和 <code class="docutils literal"><span class="pre">KEYS</span></code> ，返回的结果集是无序的。</p>
+<p>在脚本功能中，这些命令被称为 non deterministic 命令。</p>
+<p>为了避免这些 non deterministic 命令产生副作用（返回值结果无序）， Redis 使用一个辅助函数，用于对 non deterministic 命令的结果集进行排序，从而确保返回值无副作用：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cm">/* Add a helper funciton that we use to sort the multi bulk output of non</span>
+<span class="cm"> * deterministic commands, when containing &#39;false&#39; elements. */</span>
+<span class="p">{</span>
+    <span class="kt">char</span> <span class="o">*</span><span class="n">compare_func</span> <span class="o">=</span>    <span class="s">&quot;function __redis__compare_helper(a,b)</span><span class="se">\n</span><span class="s">&quot;</span>
+                                        <span class="s">&quot;  if a == false then a = &#39;&#39; end</span><span class="se">\n</span><span class="s">&quot;</span>
+                                        <span class="s">&quot;  if b == false then b = &#39;&#39; end</span><span class="se">\n</span><span class="s">&quot;</span>
+                                        <span class="s">&quot;  return a&lt;b</span><span class="se">\n</span><span class="s">&quot;</span>
+                                        <span class="s">&quot;end</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">;</span>
+    <span class="n">luaL_loadbuffer</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="n">compare_func</span><span class="p">,</span><span class="n">strlen</span><span class="p">(</span><span class="n">compare_func</span><span class="p">),</span><span class="s">&quot;@cmp_func_def&quot;</span><span class="p">);</span>
+    <span class="n">lua_pcall</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id7">
+<h3>8. 创建客户端<a class="headerlink" href="#id7" title="Permalink to this headline">¶</a></h3>
+<p>Redis 会创建一个客户端，用于处理 Lua 中执行的 Redis 命令。</p>
+<p>这个客户端无须链接（connect）到服务器，因为它本身已经运行在服务器上了：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cm">/* Create the (non connected) client that we use to execute Redis commands</span>
+<span class="cm"> * inside the Lua interpreter.</span>
+<span class="cm"> * Note: there is no need to create it again when this function is called</span>
+<span class="cm"> * by scriptingReset(). */</span>
+<span class="k">if</span> <span class="p">(</span><span class="n">server</span><span class="p">.</span><span class="n">lua_client</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">server</span><span class="p">.</span><span class="n">lua_client</span> <span class="o">=</span> <span class="n">createClient</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">);</span>
+    <span class="n">server</span><span class="p">.</span><span class="n">lua_client</span><span class="o">-&gt;</span><span class="n">flags</span> <span class="o">|=</span> <span class="n">REDIS_LUA_CLIENT</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>另外需要提醒的一点是， Redis 从始到终都只是创建了一个 Lua 环境，以及一个 <code class="docutils literal"><span class="pre">lua_client</span></code> ，这就是一个 Redis 服务器端只能处理一个脚本的原因。</p>
+</div>
+<div class="section" id="id8">
+<h3>9. 对全局变量进行保护，避免遭到有意或无意的覆盖<a class="headerlink" href="#id8" title="Permalink to this headline">¶</a></h3>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">scriptingEnableGlobalsProtection</span><span class="p">(</span><span class="n">lua</span><span class="p">);</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id9">
+<h3>10. 将 Lua 环境设置给 Redis<a class="headerlink" href="#id9" title="Permalink to this headline">¶</a></h3>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">server</span><span class="p">.</span><span class="n">lua</span> <span class="o">=</span> <span class="n">lua</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>完成以上 10 个步骤之后，一个完整的 Lua 环境就被创建并且设置好了。</p>
+<p>接下来，可以开始研究 <code class="docutils literal"><span class="pre">EVAL</span></code> 和 <code class="docutils literal"><span class="pre">EVALSHA</span></code> 这两个命令的实现，看看它们是如何配合 Lua 环境，一起完成对 Lua 脚本进行求值的任务的。</p>
+</div>
+</div>
+<div class="section" id="eval-evalsha">
+<h2>EVAL 和 EVALSHA 命令的实现<a class="headerlink" href="#eval-evalsha" title="Permalink to this headline">¶</a></h2>
+<p><code class="docutils literal"><span class="pre">EVAL</span></code> 和 <code class="docutils literal"><span class="pre">EVALSHA</span></code> 分别通过 <code class="docutils literal"><span class="pre">evalCommand</span></code> 和 <code class="docutils literal"><span class="pre">evalShaCommand</span></code> 函数实现，而这两个函数都由 <code class="docutils literal"><span class="pre">evalGenericCommand</span></code> 函数实际实现，只是接受的参数有所不同。</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="kt">void</span> <span class="nf">evalCommand</span><span class="p">(</span><span class="n">redisClient</span> <span class="o">*</span><span class="n">c</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">evalGenericCommand</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="mi">0</span><span class="p">);</span>    <span class="c1">// evalsha 参数为 0</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="nf">evalShaCommand</span><span class="p">(</span><span class="n">redisClient</span> <span class="o">*</span><span class="n">c</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// 如果传给 EVALSHA 的 SHA1 值长度不对</span>
+    <span class="c1">// 那么直接返回 noscripterr 错误</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">sdslen</span><span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">40</span><span class="p">)</span> <span class="p">{</span>
+    <span class="cm">/* We know that a match is not possible if the provided SHA is</span>
+<span class="cm">     * not the right length. So we return an error ASAP, this way</span>
+<span class="cm">     * evalGenericCommand() can be implemented without string length</span>
+<span class="cm">     * sanity check */</span>
+        <span class="n">addReply</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="n">shared</span><span class="p">.</span><span class="n">noscripterr</span><span class="p">);</span>
+        <span class="k">return</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="n">evalGenericCommand</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="mi">1</span><span class="p">);</span>    <span class="c1">// evalsha 参数为 1</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">evalGenericCommand</span></code> 函数完成了对脚本进行求值的任务：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="kt">void</span> <span class="nf">evalGenericCommand</span><span class="p">(</span><span class="n">redisClient</span> <span class="o">*</span><span class="n">c</span><span class="p">,</span> <span class="kt">int</span> <span class="n">evalsha</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// ...</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>以下是这个函数的一些主要工作：</p>
+<div class="section" id="flag">
+<h3>1. 初始化 FLAG<a class="headerlink" href="#flag" title="Permalink to this headline">¶</a></h3>
+<p>Redis 不允许脚本功能在执行一个 non deterministic 命令之后再继续执行一个写入功能，
+另外，为了让一个纯读取（read only）的脚本在不打扰一个写入脚本的情况下进行读取，提升并发性，
+Redis 使用了两个 FLAG 变量，用于检查所执行命令的属性。</p>
+<p>在后面的相关函数实现里，会看见这两个 FLAG 的应用。</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cm">/* We set this flag to zero to remember that so far no random command</span>
+<span class="cm"> * was called. This way we can allow the user to call commands like</span>
+<span class="cm"> * SRANDMEMBER or RANDOMKEY from Lua scripts as far as no write command</span>
+<span class="cm"> * is called (otherwise the replication and AOF would end with non</span>
+<span class="cm"> * deterministic sequences).</span>
+<span class="cm"> *</span>
+<span class="cm"> * Thanks to this flag we&#39;ll raise an error every time a write command</span>
+<span class="cm"> * is called after a random command was used. */</span>
+<span class="c1">// 初始化 FLAG</span>
+<span class="n">server</span><span class="p">.</span><span class="n">lua_random_dirty</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+<span class="n">server</span><span class="p">.</span><span class="n">lua_write_dirty</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id10">
+<h3>2. 生成函数名<a class="headerlink" href="#id10" title="Permalink to this headline">¶</a></h3>
+<p>在 Lua 环境中，所有的脚本都被定义为一个函数，而每个函数都是以 <code class="docutils literal"><span class="pre">f_</span></code> + 脚本 SHA1 校验和的格式存在的。</p>
+<p>举个例子，脚本 <code class="docutils literal"><span class="pre">return</span> <span class="pre">redis.call('get','foo')</span></code> 的校验和为 <code class="docutils literal"><span class="pre">6b1bf486c81ceb7edf3c093f4c48582e38c0e791</span></code> ，当这个脚本通过 <code class="docutils literal"><span class="pre">evalGenericCommand</span></code> 函数执行的时候，这个脚本会被放进一个 Lua 函数的函数体内里，而这个函数的名字就叫做 <code class="docutils literal"><span class="pre">f_6b1bf486c81ceb7edf3c093f4c48582e38c0e791</span></code> ，就像执行以下 Lua 代码一样：</p>
+<div class="highlight-lua"><div class="highlight"><pre><span class="k">function</span> <span class="nf">f_6b1bf486c81ceb7edf3c093f4c48582e38c0e791</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">redis</span><span class="p">.</span><span class="n">call</span><span class="p">(</span><span class="s1">&#39;</span><span class="s">get&#39;</span><span class="p">,</span> <span class="s1">&#39;</span><span class="s">foo&#39;</span><span class="p">)</span>
+<span class="k">end</span>
+</pre></div>
+</div>
+<p>生成函数名的工作由以下代码完成：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cm">/* We obtain the script SHA1, then check if this function is already</span>
+<span class="cm">* defined into the Lua state */</span>
+<span class="n">funcname</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="sc">&#39;f&#39;</span><span class="p">;</span>
+<span class="n">funcname</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="sc">&#39;_&#39;</span><span class="p">;</span>
+
+<span class="c1">// 如果被调用的命令是 EVAL ，那么根据脚本产生一个 SHA1 值</span>
+<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">evalsha</span><span class="p">)</span> <span class="p">{</span>
+    <span class="cm">/* Hash the code if this is an EVAL call */</span>
+    <span class="n">sha1hex</span><span class="p">(</span><span class="n">funcname</span><span class="o">+</span><span class="mi">2</span><span class="p">,</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">,</span><span class="n">sdslen</span><span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">));</span>
+<span class="c1">// 如果被调用的命令是 EVALSHA ，那么直接使用参数中的 SHA1 值</span>
+<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+    <span class="cm">/* We already have the SHA if it is a EVALSHA */</span>
+    <span class="kt">int</span> <span class="n">j</span><span class="p">;</span>
+    <span class="kt">char</span> <span class="o">*</span><span class="n">sha</span> <span class="o">=</span> <span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">;</span>
+
+    <span class="k">for</span> <span class="p">(</span><span class="n">j</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="mi">40</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span><span class="p">)</span>
+        <span class="n">funcname</span><span class="p">[</span><span class="n">j</span><span class="o">+</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">tolower</span><span class="p">(</span><span class="n">sha</span><span class="p">[</span><span class="n">j</span><span class="p">]);</span>
+    <span class="n">funcname</span><span class="p">[</span><span class="mi">42</span><span class="p">]</span> <span class="o">=</span> <span class="sc">&#39;\0&#39;</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id11">
+<h3>3. 寻找/创建函数<a class="headerlink" href="#id11" title="Permalink to this headline">¶</a></h3>
+<p>有了函数名之后，就可以根据函数明来进行查找了。</p>
+<p>因为函数名由每个脚本的 SHA1 值来决定，而每个脚本的 SHA1 值都是唯一的（好吧，不是唯一，只是碰撞的机会非常非常非常小），如果同样的一个脚本曾经被运行过，那么它就会在 Lua 环境中定义，我们可以直接使用这个函数。</p>
+<p>另一方面，如果给定脚本从来没被运行过，那么我们就定义这个函数到 Lua 环境：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cm">/* Try to lookup the Lua function */</span>
+<span class="c1">// 根据函数名，在 Lua 环境中查找函数</span>
+<span class="n">lua_getglobal</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span> <span class="n">funcname</span><span class="p">);</span>
+
+<span class="c1">// 如果函数没找到。。。</span>
+<span class="k">if</span> <span class="p">(</span><span class="n">lua_isnil</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="mi">1</span><span class="p">))</span> <span class="p">{</span>
+    <span class="n">lua_pop</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="mi">1</span><span class="p">);</span> <span class="cm">/* remove the nil from the stack */</span>
+
+    <span class="cm">/* Function not defined... let&#39;s define it if we have the</span>
+<span class="cm">     * body of the funciton. If this is an EVALSHA call we can just</span>
+<span class="cm">     * return an error. */</span>
+    <span class="c1">// 如果函数没找到且这是一个 EVALSHA 命令调用</span>
+    <span class="c1">// 那么产生一个错误</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">evalsha</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">addReply</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="n">shared</span><span class="p">.</span><span class="n">noscripterr</span><span class="p">);</span>
+        <span class="k">return</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">// 如果函数没找到且这是一个 EVAL 命令调用</span>
+    <span class="c1">// 那么创建这个函数</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">luaCreateFunction</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">lua</span><span class="p">,</span><span class="n">funcname</span><span class="p">,</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="o">==</span> <span class="n">REDIS_ERR</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+
+    <span class="cm">/* Now the following is guaranteed to return non nil */</span>
+    <span class="n">lua_getglobal</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span> <span class="n">funcname</span><span class="p">);</span>
+    <span class="n">redisAssert</span><span class="p">(</span><span class="o">!</span><span class="n">lua_isnil</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="mi">1</span><span class="p">));</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id12">
+<h3>4. 运行函数<a class="headerlink" href="#id12" title="Permalink to this headline">¶</a></h3>
+<p>有了函数之后，是时候运行它了。</p>
+<p>运行函数通过 Lua API <code class="docutils literal"><span class="pre">lua_pcall</span></code> 来完成。</p>
+<p>如果函数的执行过程中没有错误发生，那么 <code class="docutils literal"><span class="pre">lua_pcall</span></code> 返回 <code class="docutils literal"><span class="pre">0</span></code> ，否则它返回不等于 <code class="docutils literal"><span class="pre">0</span></code> 的其他值：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cm">/* At this point whatever this script was never seen before or if it was</span>
+<span class="cm"> * already defined, we can call it. We have zero arguments and expect</span>
+<span class="cm"> * a single return value. */</span>
+<span class="c1">// 执行函数</span>
+<span class="k">if</span> <span class="p">(</span><span class="n">lua_pcall</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">))</span> <span class="p">{</span>
+    <span class="c1">// 函数执行出错时的处理语句 ...</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id13">
+<h3>5. 对返回值做类型转换<a class="headerlink" href="#id13" title="Permalink to this headline">¶</a></h3>
+<p>如果函数成功执行了，那么就会产生返回值。</p>
+<p>这些返回值是一个或一些 Lua 类型的值，而我们要在 Redis 中返回它们，因此需要将这些返回值从 Lua 类型转换成 Redis 类型，这个工作由 <code class="docutils literal"><span class="pre">luaReplyToRedisReply</span></code> 完成：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="k">if</span> <span class="p">(</span><span class="n">lua_pcall</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">))</span> <span class="p">{</span>
+    <span class="c1">// 函数执行出错时的处理语句 ...</span>
+<span class="p">}</span>
+<span class="c1">// 其他函数执行成功时的处理语句 ...</span>
+<span class="n">luaReplyToRedisReply</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">lua</span><span class="p">);</span>
+<span class="c1">// 其他函数执行成功时的处理语句 ...</span>
+</pre></div>
+</div>
+<p>好的，到了这一步， <code class="docutils literal"><span class="pre">evalGenericCommand</span></code> 剩下的就是诸如释放内存和返回值这类收尾工作了，以上就是使用 <code class="docutils literal"><span class="pre">EVAL</span></code> 或 <code class="docutils literal"><span class="pre">EVALSHA</span></code> 对一个脚本进行求值的主要流程。</p>
+</div>
+</div>
+<div class="section" id="id14">
+<h2>诶，等等，先等等！<a class="headerlink" href="#id14" title="Permalink to this headline">¶</a></h2>
+<p>就在我兴高采烈准备结束 <code class="docutils literal"><span class="pre">evalGenericCommand</span></code> 这一部分的时候，我忽然发现自己漏掉了什么东西。。。</p>
+<p>文章的前一部分讲到， <code class="docutils literal"><span class="pre">evalGenericCommand</span></code> 函数进行了对脚本进行求值的实际工作，但是，在对 Lua 脚本进行求值的时候，还有一种特殊情况要处理，那就是： Lua 脚本中可能带有 <code class="docutils literal"><span class="pre">redis.call</span></code> 调用或者 <code class="docutils literal"><span class="pre">redis.pcall</span></code> 调用，这两个调用会反过来从 Lua 脚本中转到 Redis 里进行求值。</p>
+<p>比如命令 <code class="docutils literal"><span class="pre">EVAL</span> <span class="pre">&quot;return</span> <span class="pre">redis.call('set','foo','bar')&quot;</span> <span class="pre">0</span></code> 就会先在 Redis 里执行 <code class="docutils literal"><span class="pre">EVAL</span></code> 命令，然后在 Lua 里执行 <code class="docutils literal"><span class="pre">redis.call</span></code> 调用，然后又在 Lua 里对 Redis 执行命令 <code class="docutils literal"><span class="pre">SET</span></code> ，在执行完 <code class="docutils literal"><span class="pre">SET</span></code> 命令之后，Redis 将返回值转换成 Lua 值并返回给 Lua ，然后 Lua 又用 <code class="docutils literal"><span class="pre">return</span></code> 关键字，将函数的结果返回给 Redis ，作为 <code class="docutils literal"><span class="pre">EVAL</span></code> 调用的返回值。</p>
+<p>嗯，虽然这听上去很复杂，但我最好讲讲这个，因为 <code class="docutils literal"><span class="pre">redis.call</span></code> （或者 <code class="docutils literal"><span class="pre">redis.pcall</span></code> ）的调用非常关键，如果我不好好解释清楚的话，可能就会有人找我来退款，给我发恐吓信，砸烂我家的玻璃。。。我可不想遇到这种破事！</p>
+<p>之前讲过，在 <code class="docutils literal"><span class="pre">scriptingInit</span></code> 函数执行时，它会将一些函数注册到 <code class="docutils literal"><span class="pre">redis</span></code> 表中，并设置为全局变量，其中两个就是 <code class="docutils literal"><span class="pre">redis.call</span></code> 和 <code class="docutils literal"><span class="pre">redis.pcall</span></code> ：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="kt">void</span> <span class="nf">scriptingInit</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// 其他代码 ...</span>
+
+    <span class="cm">/* redis.call */</span>
+    <span class="n">lua_pushstring</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="s">&quot;call&quot;</span><span class="p">);</span>
+    <span class="n">lua_pushcfunction</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="n">luaRedisCallCommand</span><span class="p">);</span>
+    <span class="n">lua_settable</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="o">-</span><span class="mi">3</span><span class="p">);</span>
+
+    <span class="cm">/* redis.pcall */</span>
+    <span class="n">lua_pushstring</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="s">&quot;pcall&quot;</span><span class="p">);</span>
+    <span class="n">lua_pushcfunction</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="n">luaRedisPCallCommand</span><span class="p">);</span>
+    <span class="n">lua_settable</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="o">-</span><span class="mi">3</span><span class="p">);</span>
+
+    <span class="c1">// 其他代码 ...</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>当 <code class="docutils literal"><span class="pre">evalGenericCommand</span></code> 在对脚本进行求值时，如果脚本带有 <code class="docutils literal"><span class="pre">redis.call</span></code> 调用或者 <code class="docutils literal"><span class="pre">redis.pcall</span></code> 调用，Lua 就用相应的 <code class="docutils literal"><span class="pre">luaRedisCallCommand</span></code> 或者 <code class="docutils literal"><span class="pre">luaRedisPCallCommand</span></code> 来处理这些调用：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="kt">int</span> <span class="nf">luaRedisCallCommand</span><span class="p">(</span><span class="n">lua_State</span> <span class="o">*</span><span class="n">lua</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">luaRedisGenericCommand</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="mi">1</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">int</span> <span class="nf">luaRedisPCallCommand</span><span class="p">(</span><span class="n">lua_State</span> <span class="o">*</span><span class="n">lua</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">luaRedisGenericCommand</span><span class="p">(</span><span class="n">lua</span><span class="p">,</span><span class="mi">0</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>而这两个函数都调用同一个函数 <code class="docutils literal"><span class="pre">luaRedisGenericCommand</span></code> 。</p>
+<p><code class="docutils literal"><span class="pre">luaRedisGenericCommand</span></code> 函数的定义比较长，这里不打算一段段地分析它的行为了，有兴趣的可以直接去看带注释的源码，以下是这个函数的大致工作：</p>
+<ol class="arabic simple">
+<li>声明一些 Redis Object 实例，用于处理所执行的 Redis 命令</li>
+<li>对 <code class="docutils literal"><span class="pre">call</span></code> 或者 <code class="docutils literal"><span class="pre">pcall</span></code> 函数的参数进行检查，确保参数正确</li>
+<li>对调用的 Redis 命令进行检查，确保是可以在脚本环境中运行的命令（一些命令，比如 <code class="docutils literal"><span class="pre">WATCH</span></code> ，就无法在脚本环境中执行）</li>
+<li>如果要执行的 Redis 是写入型的（比如 <code class="docutils literal"><span class="pre">SET</span></code> ），那么检查它的执行环境是否合法</li>
+<li>查看内存是否足够运行指定命令，如果内存不够，尝试释放内存</li>
+<li>按需设置 <code class="docutils literal"><span class="pre">server.lua_random_dirty</span></code> 或 <code class="docutils literal"><span class="pre">server.lua_write_dirty</span></code> 这两个 FLAG</li>
+<li>执行命令</li>
+<li>取出命令的返回值，使用 <code class="docutils literal"><span class="pre">redisProtocolToLuaType</span></code> 函数将这些返回值从 Redis 类型转换成 Lua 类型</li>
+<li>如果执行的命令是 non deterministic 型的，那么对返回值进行一次排序</li>
+<li>清理环境</li>
+</ol>
+<p>好的，以上就是 <code class="docutils literal"><span class="pre">luaRedisGenericCommand</span></code> 的执行过程了。</p>
+</div>
+<div class="section" id="script">
+<h2>SCRIPT 命令的实现<a class="headerlink" href="#script" title="Permalink to this headline">¶</a></h2>
+<p>最后要说的就是 <code class="docutils literal"><span class="pre">SCRIPT</span></code> 命令了。</p>
+<p>前文里说过，Redis 将一些执行过的 Lua 脚本以 <code class="docutils literal"><span class="pre">f_</span></code> + 脚本 SHA1 校验和的命名方式作为函数，保存在 <code class="docutils literal"><span class="pre">server.lua_scripts</span></code> 属性里，而 <code class="docutils literal"><span class="pre">SCRIPT</span></code> 的主要功能，就是对 <code class="docutils literal"><span class="pre">server.lua_scripts</span></code> 进行读写或删除等操作。</p>
+<p>以下是 <code class="docutils literal"><span class="pre">SCRIPT</span></code> 命令的完整实现：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="kt">void</span> <span class="nf">scriptCommand</span><span class="p">(</span><span class="n">redisClient</span> <span class="o">*</span><span class="n">c</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argc</span> <span class="o">==</span> <span class="mi">2</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="n">strcasecmp</span><span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">,</span><span class="s">&quot;flush&quot;</span><span class="p">))</span> <span class="p">{</span>
+        <span class="c1">// 重置脚本环境</span>
+        <span class="n">scriptingReset</span><span class="p">();</span>
+        <span class="n">addReply</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">shared</span><span class="p">.</span><span class="n">ok</span><span class="p">);</span>
+        <span class="n">server</span><span class="p">.</span><span class="n">dirty</span><span class="o">++</span><span class="p">;</span> <span class="cm">/* Replicating this command is a good idea. */</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argc</span> <span class="o">&gt;=</span> <span class="mi">2</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="n">strcasecmp</span><span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">,</span><span class="s">&quot;exists&quot;</span><span class="p">))</span> <span class="p">{</span>
+        <span class="kt">int</span> <span class="n">j</span><span class="p">;</span>
+
+        <span class="c1">// 遍历 server.lua_scripts 属性</span>
+        <span class="c1">// 检查给定的一个或多个脚本是否存在</span>
+        <span class="n">addReplyMultiBulkLen</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="n">c</span><span class="o">-&gt;</span><span class="n">argc</span><span class="o">-</span><span class="mi">2</span><span class="p">);</span>
+        <span class="k">for</span> <span class="p">(</span><span class="n">j</span> <span class="o">=</span> <span class="mi">2</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">c</span><span class="o">-&gt;</span><span class="n">argc</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">dictFind</span><span class="p">(</span><span class="n">server</span><span class="p">.</span><span class="n">lua_scripts</span><span class="p">,</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">[</span><span class="n">j</span><span class="p">]</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">))</span>
+                <span class="n">addReply</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">shared</span><span class="p">.</span><span class="n">cone</span><span class="p">);</span>
+            <span class="k">else</span>
+                <span class="n">addReply</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">shared</span><span class="p">.</span><span class="n">czero</span><span class="p">);</span>
+        <span class="p">}</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argc</span> <span class="o">==</span> <span class="mi">3</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="n">strcasecmp</span><span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">,</span><span class="s">&quot;load&quot;</span><span class="p">))</span> <span class="p">{</span>
+        <span class="kt">char</span> <span class="n">funcname</span><span class="p">[</span><span class="mi">43</span><span class="p">];</span>
+        <span class="n">sds</span> <span class="n">sha</span><span class="p">;</span>
+
+        <span class="c1">// 根据给定脚本，生成 Lua 函数，并将它载入到 server.lua_scripts 当中</span>
+        <span class="n">funcname</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="sc">&#39;f&#39;</span><span class="p">;</span>
+        <span class="n">funcname</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="sc">&#39;_&#39;</span><span class="p">;</span>
+        <span class="n">sha1hex</span><span class="p">(</span><span class="n">funcname</span><span class="o">+</span><span class="mi">2</span><span class="p">,</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">,</span><span class="n">sdslen</span><span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">));</span>
+        <span class="n">sha</span> <span class="o">=</span> <span class="n">sdsnewlen</span><span class="p">(</span><span class="n">funcname</span><span class="o">+</span><span class="mi">2</span><span class="p">,</span><span class="mi">40</span><span class="p">);</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">dictFind</span><span class="p">(</span><span class="n">server</span><span class="p">.</span><span class="n">lua_scripts</span><span class="p">,</span><span class="n">sha</span><span class="p">)</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">luaCreateFunction</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">server</span><span class="p">.</span><span class="n">lua</span><span class="p">,</span><span class="n">funcname</span><span class="p">,</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+                    <span class="o">==</span> <span class="n">REDIS_ERR</span><span class="p">)</span> <span class="p">{</span>
+                <span class="n">sdsfree</span><span class="p">(</span><span class="n">sha</span><span class="p">);</span>
+                <span class="k">return</span><span class="p">;</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+        <span class="n">addReplyBulkCBuffer</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">funcname</span><span class="o">+</span><span class="mi">2</span><span class="p">,</span><span class="mi">40</span><span class="p">);</span>
+        <span class="n">sdsfree</span><span class="p">(</span><span class="n">sha</span><span class="p">);</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argc</span> <span class="o">==</span> <span class="mi">2</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="n">strcasecmp</span><span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-&gt;</span><span class="n">ptr</span><span class="p">,</span><span class="s">&quot;kill&quot;</span><span class="p">))</span> <span class="p">{</span>
+        <span class="c1">// 终止指定脚本的运行</span>
+        <span class="c1">// 关于终止方式的细节，可以看 evalGenericCommand 函数是如何处理的</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">server</span><span class="p">.</span><span class="n">lua_caller</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">addReplyError</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="s">&quot;No scripts in execution right now.&quot;</span><span class="p">);</span>
+        <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">server</span><span class="p">.</span><span class="n">lua_write_dirty</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">addReplyError</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="s">&quot;Sorry the script already executed write commands against the dataset. You can either wait the script termination or kill the server in an hard way using the SHUTDOWN NOSAVE command.&quot;</span><span class="p">);</span>
+        <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+            <span class="n">server</span><span class="p">.</span><span class="n">lua_kill</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+            <span class="n">addReply</span><span class="p">(</span><span class="n">c</span><span class="p">,</span><span class="n">shared</span><span class="p">.</span><span class="n">ok</span><span class="p">);</span>
+        <span class="p">}</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="n">addReplyError</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="s">&quot;Unknown SCRIPT subcommand or wrong # of args.&quot;</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id15">
+<h2>搞定！<a class="headerlink" href="#id15" title="Permalink to this headline">¶</a></h2>
+<p>以上就是 Redis 的 Lua 脚本功能的实现分析了，因为边幅的原因，这里主要介绍了几个主要函数的最重要的执行部分，一些错误处理或者其他细节功能的实现就被忽略掉了，我将带有完整注释的 <code class="docutils literal"><span class="pre">scripting.c</span></code> 放到了 GITHUB 上，想了解所有细节的朋友可以到上面看看： <a class="reference external" href="https://github.com/huangz1990/reading_redis_source">https://github.com/huangz1990/reading_redis_source</a> 。</p>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Lua 脚本</a><ul>
+<li><a class="reference internal" href="#id1">预备知识</a></li>
+<li><a class="reference internal" href="#id2">脚本功能的实现</a></li>
+<li><a class="reference internal" href="#lua-redis">Lua 嵌入 Redis</a><ul>
+<li><a class="reference internal" href="#id3">1. 创建新的 Lua 环境</a></li>
+<li><a class="reference internal" href="#id4">2. 载入函数包</a></li>
+<li><a class="reference internal" href="#redis-lua">3. 移除不能暴露给 Redis 环境的 Lua 函数</a></li>
+<li><a class="reference internal" href="#id5">4. 创建字典，用于保存脚本缓存</a></li>
+<li><a class="reference internal" href="#redis-table">5. 创建并设置 redis table</a></li>
+<li><a class="reference internal" href="#math-table-random-randomseed">6. 覆盖 math table 中的 random 和 randomseed 函数</a></li>
+<li><a class="reference internal" href="#id6">7. 创建辅助函数，用于排序</a></li>
+<li><a class="reference internal" href="#id7">8. 创建客户端</a></li>
+<li><a class="reference internal" href="#id8">9. 对全局变量进行保护，避免遭到有意或无意的覆盖</a></li>
+<li><a class="reference internal" href="#id9">10. 将 Lua 环境设置给 Redis</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#eval-evalsha">EVAL 和 EVALSHA 命令的实现</a><ul>
+<li><a class="reference internal" href="#flag">1. 初始化 FLAG</a></li>
+<li><a class="reference internal" href="#id10">2. 生成函数名</a></li>
+<li><a class="reference internal" href="#id11">3. 寻找/创建函数</a></li>
+<li><a class="reference internal" href="#id12">4. 运行函数</a></li>
+<li><a class="reference internal" href="#id13">5. 对返回值做类型转换</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#id14">诶，等等，先等等！</a></li>
+<li><a class="reference internal" href="#script">SCRIPT 命令的实现</a></li>
+<li><a class="reference internal" href="#id15">搞定！</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="sds.html"
+                        title="previous chapter">SDS 结构</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="event-driven.html"
+                        title="next chapter">事件驱动</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

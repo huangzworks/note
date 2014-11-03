@@ -1,0 +1,217 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>发送查询 &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="up" title="MariaDB" href="index.html" />
+    <link rel="next" title="基本数据库操作" href="primary-db-operation.html" />
+    <link rel="prev" title="安装" href="install.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="primary-db-operation.html" title="基本数据库操作"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="install.html" title="安装"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">MariaDB</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>发送查询<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<p>查询数据库的当前版本：</p>
+<div class="highlight-python"><div class="highlight"><pre>MariaDB [(none)]&gt; SELECT VERSION();
++-----------------------------+
+| VERSION()                   |
++-----------------------------+
+| 10.0.9-MariaDB-1~wheezy-log |
++-----------------------------+
+1 row in set (0.01 sec)
+</pre></div>
+</div>
+<p>因为关键字<em>不限制大小写</em>，所以以下语句和上面的语句产生同样的效果：</p>
+<div class="highlight-python"><div class="highlight"><pre>SELECT VERSION();
+select version();
+SeLeCt VeRsIoN();
+</pre></div>
+</div>
+<p>还可以在一行里面输入多个查询，
+只要使用分号（<code class="docutils literal"><span class="pre">;</span></code>）来隔开各个查询就可以了：</p>
+<div class="highlight-python"><div class="highlight"><pre>MariaDB [(none)]&gt; SELECT VERSION(); SELECT NOW();
++-----------------------------+
+| VERSION()                   |
++-----------------------------+
+| 10.0.9-MariaDB-1~wheezy-log |
++-----------------------------+
+1 row in set (0.00 sec)
+
++---------------------+
+| NOW()               |
++---------------------+
+| 2014-03-14 21:40:22 |
++---------------------+
+1 row in set (0.00 sec)
+</pre></div>
+</div>
+<p>因为客户端根据分号而不是行数来判断查询是否完整，
+所以我们可以将一个查询分到多个行里面：</p>
+<div class="highlight-python"><div class="highlight"><pre>MariaDB [(none)]&gt; SELECT
+-&gt; USER()
+-&gt; ;
++----------------+
+| USER()         |
++----------------+
+| root@localhost |
++----------------+
+1 row in set (0.00 sec)
+</pre></div>
+</div>
+<p>注意，
+在将一个查询分到多个行里面写入时，
+客户端的提示符从原来的 <code class="docutils literal"><span class="pre">&gt;</span></code> 变成了 <code class="docutils literal"><span class="pre">-&gt;</span></code> ，
+这表示客户端正在等待后续的输入。</p>
+<p>下表展示了一些可能在客户端里面出现的提示符，
+以及这些提示符的意义：</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="8%" />
+<col width="92%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">提示符</th>
+<th class="head">意义</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">&gt;</span></code></td>
+<td>等待新查询的输入。</td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">-&gt;</span></code></td>
+<td>等待新的多行输入。</td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">'&gt;</span></code></td>
+<td>等待新的多行输入，以及一个以 <code class="docutils literal"><span class="pre">'</span></code> 开始的字符串的结尾。</td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">&quot;&gt;</span></code></td>
+<td>等待新的多行输入，以及一个以 <code class="docutils literal"><span class="pre">&quot;</span></code> 开始的字符串的结尾。</td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">\`&gt;</span></code></td>
+<td>等待新的多行输入，以及一个以 <code class="docutils literal"><span class="pre">\`</span></code> 符号开始的标识符的结尾。</td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">/*&gt;</span></code></td>
+<td>等待新的多行输入，以及一个以 <code class="docutils literal"><span class="pre">/*</span></code> 开始的注释的结尾。</td>
+</tr>
+</tbody>
+</table>
+<p>如果在输入查询时键入了错误的内容，
+那么可以输入 <code class="docutils literal"><span class="pre">\c</span></code> 来撤销已键入的查询：</p>
+<div class="highlight-python"><div class="highlight"><pre>MariaDB [(none)]&gt; SELECT
+-&gt; WRONG INPUT
+-&gt; OOPS
+-&gt; \c
+</pre></div>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="install.html"
+                        title="previous chapter">安装</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="primary-db-operation.html"
+                        title="next chapter">基本数据库操作</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

@@ -1,0 +1,689 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>第 8 章：进程控制 &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="up" title="《UNIX 环境高级编程》笔记" href="index.html" />
+    <link rel="next" title="第 10 章：信号" href="chp10.html" />
+    <link rel="prev" title="第 4 章：文件和目录" href="chp4.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="chp10.html" title="第 10 章：信号"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="chp4.html" title="第 4 章：文件和目录"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">《UNIX 环境高级编程》笔记</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>第 8 章：进程控制<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="id2">
+<h2>进程标识符<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>每个进程都拥有一个非负整数表示的唯一进程 ID ，
+这个 ID 可以用 <code class="docutils literal"><span class="pre">getpid</span></code> 函数查看：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#include &lt;unistd.h&gt;</span>
+
+<span class="kt">pid_t</span> <span class="nf">getpid</span><span class="p">(</span><span class="kt">void</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>示例：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// 8-getpid.c</span>
+
+<span class="cp">#include &lt;unistd.h&gt;</span>
+<span class="cp">#include &lt;stdio.h&gt;</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;Process id = %d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">getpid</span><span class="p">());</span>
+
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>执行：</p>
+<div class="highlight-c"><div class="highlight"><pre>$ ./8-getpid.out
+Process id = 6754
+</pre></div>
+</div>
+<p>除了 <code class="docutils literal"><span class="pre">getpid</span></code> 以外，其他一些函数也可以返回进程相关的其他 ID ：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#include &lt;unistd.h&gt;</span>
+
+<span class="c1">// 返回调用进程的父进程 ID</span>
+<span class="kt">pid_t</span> <span class="nf">getppid</span><span class="p">(</span><span class="kt">void</span><span class="p">);</span>
+
+<span class="c1">// 调用进程的实际用户 ID</span>
+<span class="kt">pid_t</span> <span class="nf">getuid</span><span class="p">(</span><span class="kt">void</span><span class="p">);</span>
+
+<span class="c1">// 调用进程的有效用户 ID</span>
+<span class="kt">pid_t</span> <span class="nf">geteuid</span><span class="p">(</span><span class="kt">void</span><span class="p">);</span>
+
+<span class="c1">// 调用进程的实际组 ID</span>
+<span class="kt">gid_t</span> <span class="nf">getgid</span><span class="p">(</span><span class="kt">void</span><span class="p">);</span>
+
+<span class="c1">// 调用进程的有效组 ID</span>
+<span class="kt">gid_t</span> <span class="nf">getegid</span><span class="p">(</span><span class="kt">void</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>示例：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// 8-ids.c</span>
+
+<span class="cp">#include &lt;unistd.h&gt;</span>
+<span class="cp">#include &lt;stdio.h&gt;</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+    
+    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;Parent pid = %d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">getppid</span><span class="p">());</span>
+
+    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;Uid = %d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">getuid</span><span class="p">());</span>
+
+    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;Euid = %d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">geteuid</span><span class="p">());</span>
+
+    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;Gid = %d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">getgid</span><span class="p">());</span>
+
+    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;Egid = %d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">getegid</span><span class="p">());</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>执行：</p>
+<div class="highlight-c"><div class="highlight"><pre>$ ./8-ids.o
+Parent pid = 6738
+Uid = 1000
+Euid = 1000
+Gid = 1000
+Egid = 1000
+</pre></div>
+</div>
+</div>
+<div class="section" id="id3">
+<h2>创建进程<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<p>一个进程可以通过调用 <code class="docutils literal"><span class="pre">fork</span></code> 函数来创建另一个进程，
+调用 <code class="docutils literal"><span class="pre">fork</span></code> 的函数被称为父进程（parent process），
+而被创建的进程则称为子进程（child process）：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#include &lt;unistd.h&gt;</span>
+
+<span class="kt">pid_t</span> <span class="nf">fork</span><span class="p">(</span><span class="kt">void</span><span class="p">);</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">fork</span></code> 函数调用一次却返回两次，
+子进程返回 <code class="docutils literal"><span class="pre">0</span></code> ，而父进程返回子进程的 ID 。</p>
+<p>父子进程继续执行 <code class="docutils literal"><span class="pre">fork</span></code> 调用之后的指令。</p>
+<p>子进程是父进程的副本，它拥有父进程数据空间、堆和栈的副本。
+两个进程之间的副本是不共享的，它们只是数据一样，但父子进程共享程序的正文段。</p>
+<p>示例：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// 8-fork.c</span>
+
+<span class="cp">#include &lt;unistd.h&gt;</span>
+<span class="cp">#include &lt;stdio.h&gt;</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="kt">pid_t</span> <span class="n">child_id</span><span class="p">;</span>
+
+    <span class="n">child_id</span> <span class="o">=</span> <span class="n">fork</span><span class="p">();</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="n">child_id</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;Child process running, id = %d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">getpid</span><span class="p">());</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;Child process&#39;s parent id = %d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">getppid</span><span class="p">());</span>
+    <span class="p">}</span>
+    <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">child_id</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;Parent process running, id = %d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">getpid</span><span class="p">());</span>
+    <span class="p">}</span>
+    <span class="k">else</span> <span class="p">{</span>
+        <span class="c1">// child_id == -1</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;Fork error</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>执行：</p>
+<div class="highlight-c"><div class="highlight"><pre>$ ./8-fork.out
+Parent process running, id = 7549
+Child process running, id = 7550
+Child process&#39;s parent id = 7549
+</pre></div>
+</div>
+<p>一般来说，父子进程执行的先后顺序是不确定的，
+进程间的同步需要某种形式的进程间通讯才能实现，
+所以编程多进程程序时，要小心，不要写出依赖某种执行顺序的程序。</p>
+</div>
+<div class="section" id="fork">
+<h2>fork 的用法<a class="headerlink" href="#fork" title="Permalink to this headline">¶</a></h2>
+<p><code class="docutils literal"><span class="pre">fork</span></code> 的常见用法有两种：</p>
+<ol class="arabic simple">
+<li>创建父进程的副本，子进程和父进程执行不同的代码段 —— 常用于网络程序</li>
+<li>调用 <code class="docutils literal"><span class="pre">exec</span></code> 或其变种，执行另一个程序 —— 常用于 shell</li>
+</ol>
+</div>
+<div class="section" id="id4">
+<h2>父子进程间的数据副本<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h2>
+<p>在前面说到，子进程会复制父进程数据的副本，以下示例程序展示了这一情况：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// 8-data-duplicate.c</span>
+
+<span class="cp">#include &lt;unistd.h&gt;</span>
+<span class="cp">#include &lt;stdio.h&gt;</span>
+
+<span class="kt">int</span> <span class="n">global</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+   
+    <span class="kt">int</span> <span class="n">local</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;init global = %d , local = %d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">global</span><span class="p">,</span> <span class="n">local</span><span class="p">);</span>
+
+    <span class="kt">pid_t</span> <span class="n">child_pid</span> <span class="o">=</span> <span class="n">fork</span><span class="p">();</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">child_pid</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">global</span><span class="o">++</span><span class="p">;</span>
+        <span class="n">local</span><span class="o">++</span><span class="p">;</span>
+
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;child running, global = %d , local = %d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">global</span><span class="p">,</span> <span class="n">local</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">child_pid</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">global</span><span class="o">++</span><span class="p">;</span>
+        <span class="n">local</span><span class="o">++</span><span class="p">;</span>
+
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;parent running, global = %d , local = %d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">global</span><span class="p">,</span> <span class="n">local</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">else</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;Fork error</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>执行：</p>
+<div class="highlight-c"><div class="highlight"><pre>$ ./8-data-duplicate.out
+init global = 0 , local = 0
+parent running, global = 1 , local = 1
+child running, global = 1 , local = 1
+</pre></div>
+</div>
+<p>可以看到，无论是子进程也好，父进程也好，
+它们对全局变量 <code class="docutils literal"><span class="pre">global</span></code> 和局部变量 <code class="docutils literal"><span class="pre">local</span></code> 的修改都只限于它们自己的内存空间中。</p>
+<p>如果进程之间是共享数据的话，
+那么不管父子进程的执行顺序如何，
+对 <code class="docutils literal"><span class="pre">global</span></code> 和 <code class="docutils literal"><span class="pre">local</span></code> 的两次输出中都会有一次它们的值都变为 <code class="docutils literal"><span class="pre">2</span></code> 。</p>
+</div>
+<div class="section" id="id5">
+<h2>父子进程间的文件描述符副本<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h2>
+<p>父进程打开的所有文件描述符，
+都会被复制到子进程当中，
+父子进程的每个相同的打开描述符共享一个文件表项：</p>
+<img alt="../../_images/8-share-file.png" src="../../_images/8-share-file.png" />
+<p>以下示例程序演示了父子进程如何写入内容到同一个文件，
+其中文件由父进程打开，
+而子进程继承了父进程的 <code class="docutils literal"><span class="pre">FILE</span></code> 结构（以及它的文件描述符）：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// 8-share-file.c</span>
+
+<span class="cp">#include &lt;stdio.h&gt;</span>
+<span class="cp">#include &lt;unistd.h&gt;</span>
+
+<span class="cp">#define PARENT_CONENT &quot;parent write\n&quot;</span>
+<span class="cp">#define CHILD_CONTENT &quot;child write\n&quot;</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="c1">// file</span>
+
+    <span class="kt">FILE</span> <span class="o">*</span><span class="n">f</span> <span class="o">=</span> <span class="n">fopen</span><span class="p">(</span><span class="s">&quot;8-share-file-text&quot;</span><span class="p">,</span> <span class="s">&quot;wa&quot;</span><span class="p">);</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">f</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;open/create file fail</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">// process</span>
+
+    <span class="kt">pid_t</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">fork</span><span class="p">();</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">pid</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="c1">// child</span>
+        <span class="n">fputs</span><span class="p">(</span><span class="n">CHILD_CONTENT</span><span class="p">,</span> <span class="n">f</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">pid</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="c1">// parent</span>
+        <span class="n">fputs</span><span class="p">(</span><span class="n">PARENT_CONENT</span><span class="p">,</span> <span class="n">f</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">else</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;fork fail</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">2</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>执行：</p>
+<div class="highlight-c"><div class="highlight"><pre>$ ./8-share-file.out
+$ cat 8-share-file-text
+child write
+parent write
+</pre></div>
+</div>
+</div>
+<div class="section" id="id6">
+<h2>父子进程的属性<a class="headerlink" href="#id6" title="Permalink to this headline">¶</a></h2>
+<p>除了打开文件之外，父进程的很多其他属性也由子进程继承，包括：</p>
+<ul class="simple">
+<li>实际用户 ID 、实际组 ID 、有效用户 ID 、有效组 ID</li>
+<li>附加组 ID</li>
+<li>进程组 ID</li>
+<li>会话 ID</li>
+<li>控制终端</li>
+<li>设置用户 ID 标识和设置组 ID 标识</li>
+<li>当前工作目录（CWD）</li>
+<li>根目录</li>
+<li>文件模式创建屏蔽字</li>
+<li>信号屏蔽和安排</li>
+<li>针对任意打开文件描述符的在执行时关闭（close-on-exec）标识</li>
+<li>环境</li>
+<li>链接的共享存储段</li>
+<li>存储映射</li>
+<li>资源限制</li>
+</ul>
+<p>父子进程之间的区别是：</p>
+<ul class="simple">
+<li><code class="docutils literal"><span class="pre">fork</span></code> 的返回值</li>
+<li>进程 ID 不同</li>
+<li>两个进程具有不同的父进程 ID</li>
+<li>子进程的 <code class="docutils literal"><span class="pre">tms_utime</span></code> 、 <code class="docutils literal"><span class="pre">tms_stime</span></code> 、 <code class="docutils literal"><span class="pre">tms_cutime</span></code> 以及 <code class="docutils literal"><span class="pre">tms_ustime</span></code> 均被设置为 <code class="docutils literal"><span class="pre">0</span></code></li>
+<li>父进程的文件所不会被子进程继承</li>
+<li>子进程的未处理闹钟（alarm）被清除</li>
+<li>子进程的未处理信号集为空集</li>
+</ul>
+</div>
+<div class="section" id="vfork">
+<h2>vfork<a class="headerlink" href="#vfork" title="Permalink to this headline">¶</a></h2>
+<p><code class="docutils literal"><span class="pre">vfork</span></code> 函数的签名和返回值都和 <code class="docutils literal"><span class="pre">fork</span></code> 一样：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#include &lt;sys/types.h&gt;</span>
+<span class="cp">#include &lt;unistd.h&gt;</span>
+
+<span class="kt">pid_t</span> <span class="nf">vfork</span><span class="p">(</span><span class="kt">void</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>这两个函数的不同之处在于语义，
+<code class="docutils literal"><span class="pre">vfork</span></code> 同样会创建新的子进程，
+但是在调用 <code class="docutils literal"><span class="pre">exit</span></code> 或者 <code class="docutils literal"><span class="pre">exec</span></code> 之前，
+它在父进程的空间中运行。</p>
+<p>因为 <code class="docutils literal"><span class="pre">vfork</span></code> 避免了对父进程地址空间的复制，
+所以它的资源占用和速度比 <code class="docutils literal"><span class="pre">fork</span></code> 更少和更快，
+可以将它看作一个专为创建新程序（调用<code class="docutils literal"><span class="pre">exec</span></code>）而优化的 <code class="docutils literal"><span class="pre">fork</span></code> 。</p>
+<p>另一个区别是，
+<code class="docutils literal"><span class="pre">vfork</span></code> 保证子进程先运行，
+在子进程调用 <code class="docutils literal"><span class="pre">exec</span></code> 或者 <code class="docutils literal"><span class="pre">exit</span></code> 之后，
+父进程才会继续执行。</p>
+<p>以下实例展示了 <code class="docutils literal"><span class="pre">vfork</span></code> 的用法，
+子进程的输出总在父进程的输出之前：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// 8-vfork.c</span>
+
+<span class="cp">#include &lt;unistd.h&gt;</span>
+<span class="cp">#include &lt;sys/types.h&gt;</span>
+<span class="cp">#include &lt;stdlib.h&gt;</span>
+<span class="cp">#include &lt;stdio.h&gt;</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+    
+    <span class="kt">pid_t</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">vfork</span><span class="p">();</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">pid</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;child running</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span> 
+        <span class="c1">// signal parent to continue ...</span>
+    <span class="p">}</span>
+    <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">pid</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;parent running</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">else</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;vfork error</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>执行结果：</p>
+<div class="highlight-c"><div class="highlight"><pre>$ ./8-vfork.out
+child running
+parent running
+</pre></div>
+</div>
+</div>
+<div class="section" id="id7">
+<h2>进程退出<a class="headerlink" href="#id7" title="Permalink to this headline">¶</a></h2>
+<p>进程退出可以分为两类，包括正常退出和异常终止。</p>
+<p>正常退出包括以下五种情况：</p>
+<ol class="arabic simple">
+<li><code class="docutils literal"><span class="pre">main</span></code> 函数执行 <code class="docutils literal"><span class="pre">return</span></code> 语句，等同于调用 <code class="docutils literal"><span class="pre">exit</span></code> 函数。</li>
+<li>调用 <code class="docutils literal"><span class="pre">exit(3)</span></code> 函数。这会调用所有用 <code class="docutils literal"><span class="pre">atexit(3)</span></code> 和 <code class="docutils literal"><span class="pre">on_exit(3)</span></code> 注册的退出处理程序，冲洗并关闭所有打开的 <code class="docutils literal"><span class="pre">stdio(3)</span></code> 流，并移除 <code class="docutils literal"><span class="pre">tmpfile(3)</span></code> 创建的临时文件。</li>
+<li>调用 <code class="docutils literal"><span class="pre">unistd.h/_exit</span></code> 或者 <code class="docutils literal"><span class="pre">stdlib.h/_Exit</span></code> ，这两个原语同义，它们都用于退出进程。它们和 <code class="docutils literal"><span class="pre">exit(3)</span></code> 的区别是， <code class="docutils literal"><span class="pre">_exit</span></code> 和 <code class="docutils literal"><span class="pre">_Exit</span></code> 并不调用退出处理程序，而是否冲洗流，是否删除临时文件，都取决于实现。（也就是说，如果你调用 <code class="docutils literal"><span class="pre">_exit</span></code> 和 <code class="docutils literal"><span class="pre">_Exit</span></code> ，那么请自己控制流的冲洗，以及临时文件的删除）。</li>
+<li>进程的最后一个线程返回。该返回值并不会用作进程的返回值。当最后一个线程从其启动例程返回时，该进程以终止状态 <code class="docutils literal"><span class="pre">0</span></code> 返回。</li>
+<li>进程的最后一个线程调用 <code class="docutils literal"><span class="pre">pthread_exit</span></code> 函数返回，和上一种情况一样，进程也总是返回 <code class="docutils literal"><span class="pre">0</span></code> ，和传给 <code class="docutils literal"><span class="pre">pthread_exit</span></code> 函数的参数无关。</li>
+</ol>
+<p>异常终止包括以下三种情况：</p>
+<ol class="arabic simple" start="6">
+<li>调用 <code class="docutils literal"><span class="pre">abort</span></code> ，产生 <code class="docutils literal"><span class="pre">SIGABRT</span></code> 信号。</li>
+<li>进程因为接收到某些信号而终止，信号可以来自于进程自身、其他进程或者内核。</li>
+<li>最后一个线程对 <code class="docutils literal"><span class="pre">pthread_cancel</span></code> 请求做出响应。</li>
+</ol>
+<p>不论进程是如何退出/终止的，都会运行内核中的同一段代码，这段代码为相应的进程关闭所有打开描述符，释放它们使用的储存器，向父进程发送信号，等等。</p>
+</div>
+<div class="section" id="id8">
+<h2>父子进程在退出之后的互动<a class="headerlink" href="#id8" title="Permalink to this headline">¶</a></h2>
+<p>当一个进程拥有子进程的话，那么就会产生以下两种情况的其中一种：</p>
+<ol class="arabic simple">
+<li>子进程先退出</li>
+<li>父进程先退出</li>
+</ol>
+<p>当子进程比父进程先退出时，子进程变为僵死（zombie）进程，父进程可以通过 <code class="docutils literal"><span class="pre">wait</span></code> 或者 <code class="docutils literal"><span class="pre">waitpid</span></code> 等函数来获得子进程的退出信息。</p>
+<p>在父进程先退出时，子进程的父进程会变为 <code class="docutils literal"><span class="pre">init</span></code> 进程（<code class="docutils literal"><span class="pre">pid</span></code> 通常为 <code class="docutils literal"><span class="pre">1</span></code>），并由 <code class="docutils literal"><span class="pre">init</span></code> 处理这些子进程的退出。
+<code class="docutils literal"><span class="pre">init</span></code> 被设计为不带有任何僵死子进程：当子进程退出时，它马上调用 <code class="docutils literal"><span class="pre">wait</span></code> 函数，获取其终止状态。</p>
+</div>
+<div class="section" id="id9">
+<h2>处理子进程退出<a class="headerlink" href="#id9" title="Permalink to this headline">¶</a></h2>
+<p>当子进程退出时（不论是正常退出还是异常终止），
+子进程都会给父进程发送信号，
+这个信号是异步发送的，
+所以父进程也要异步地处理这个信号。</p>
+<p>处理信号有两种方式，一是忽略它，而是用一个函数（信号处理程序）来处理它。</p>
+<p>其中，父进程通过调用 <code class="docutils literal"><span class="pre">wait</span></code> 和 <code class="docutils literal"><span class="pre">waitpid</span></code> 函数，可以获取子进程的退出信息，释放相关资源，并让子进程脱离僵死状态：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#include &lt;sys/wait.h&gt;</span>
+
+<span class="kt">pid_t</span> <span class="nf">wait</span><span class="p">(</span><span class="kt">int</span> <span class="o">*</span><span class="n">status</span><span class="p">);</span>
+
+<span class="kt">pid_t</span> <span class="nf">waitpid</span><span class="p">(</span><span class="kt">pid_t</span> <span class="n">pid</span><span class="p">,</span> <span class="kt">int</span> <span class="o">*</span><span class="n">status</span><span class="p">,</span> <span class="kt">int</span> <span class="n">options</span><span class="p">);</span>
+</pre></div>
+</div>
+<p><strong>wait</strong></p>
+<p><code class="docutils literal"><span class="pre">wait</span></code> 函数返回任意一个子进程的终止状态，将它保存到 <code class="docutils literal"><span class="pre">status</span></code> ，然后返回子进程的 ID 作为返回值。</p>
+<p>如果调用进程没有任何子进程，那么 <code class="docutils literal"><span class="pre">wait</span></code> 返回 <code class="docutils literal"><span class="pre">-1</span></code> 表示出错；
+如果调用进程的子进程都仍在执行，没有子进程的终止状态可返回，那么 <code class="docutils literal"><span class="pre">wait</span></code> 阻塞直到任意一个子进程终结。</p>
+<p><strong>waitpid</strong></p>
+<p><code class="docutils literal"><span class="pre">waitpid</span></code> 和 <code class="docutils literal"><span class="pre">wait</span></code> 的不同之处在于， <code class="docutils literal"><span class="pre">waitpid</span></code> 可以选择自己要等待的进程，
+也可以决定子进程未终结时是否阻塞，
+支持作业控制，
+以及一些其他更细致的选项。</p>
+<p><code class="docutils literal"><span class="pre">waitpid</span></code> 的 <code class="docutils literal"><span class="pre">pid</span></code> 参数用于指定等待的特定子进程，它的值可以是：</p>
+<ul class="simple">
+<li><code class="docutils literal"><span class="pre">pid</span> <span class="pre">==</span> <span class="pre">-1</span></code> ：等待任意一个子进程，类似于 <code class="docutils literal"><span class="pre">wait</span></code> 。</li>
+<li><code class="docutils literal"><span class="pre">pid</span> <span class="pre">&gt;</span> <span class="pre">0</span></code> ：等待 ID 值为 <code class="docutils literal"><span class="pre">pid</span></code> 的子进程。</li>
+<li><code class="docutils literal"><span class="pre">pid</span> <span class="pre">&lt;</span> <span class="pre">-1</span></code> ：等待任意组 ID 为 <code class="docutils literal"><span class="pre">pid</span></code> 绝对值的子进程。</li>
+<li><code class="docutils literal"><span class="pre">pid</span> <span class="pre">==</span> <span class="pre">0</span></code> ：等待任意组 ID 和父进程相同的子进程。</li>
+</ul>
+<p><code class="docutils literal"><span class="pre">options</span></code> 参数用于控制 <code class="docutils literal"><span class="pre">waitpid</span></code> 的返回行为，它的其中两个常用值如下：</p>
+<ul class="simple">
+<li><code class="docutils literal"><span class="pre">0</span></code> ：执行默认行为 —— 在 <code class="docutils literal"><span class="pre">pid</span></code> 参数指定的进程未终结时，一直阻塞。</li>
+<li><code class="docutils literal"><span class="pre">WNOHANG</span></code> ：在 <code class="docutils literal"><span class="pre">pid</span></code> 参数指定的进程未终结时，不阻塞，直接返回 <code class="docutils literal"><span class="pre">0</span></code> ，结束 <code class="docutils literal"><span class="pre">waitpid</span></code> 的调用。</li>
+</ul>
+<p>还有 <code class="docutils literal"><span class="pre">options</span></code> 参数，可以参考文档。</p>
+<p><code class="docutils literal"><span class="pre">wait</span></code> 函数等同于 <code class="docutils literal"><span class="pre">waitpid(-1,</span> <span class="pre">&amp;status,</span> <span class="pre">0)</span></code> 。</p>
+<p>需要说明的是，
+<code class="docutils literal"><span class="pre">wait</span></code> 和 <code class="docutils literal"><span class="pre">waitpid</span></code> 的实际作用是等待子进程的状态改变，
+子进程的退出只是“状态”的其中一种，
+这两个函数的更多用法可以参考文档。</p>
+<p>以下示例程序中，父进程总是等待子进程退出之后，自己才退出：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// 8-parent-wait-for-child.c</span>
+
+<span class="cp">#include &lt;unistd.h&gt;</span>
+<span class="cp">#include &lt;stdio.h&gt;</span>
+<span class="cp">#include &lt;sys/wait.h&gt;</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+    
+    <span class="kt">pid_t</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">fork</span><span class="p">();</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">pid</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;child return</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+    <span class="p">}</span> 
+    <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">pid</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">wait</span><span class="p">(</span><span class="nb">NULL</span><span class="p">);</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;parent return</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">else</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;fork error</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>执行：</p>
+<div class="highlight-c"><div class="highlight"><pre>$ ./8-parent-wait-for-child.out
+child return
+parent return
+</pre></div>
+</div>
+</div>
+<div class="section" id="id10">
+<h2>获取子进程的退出情况<a class="headerlink" href="#id10" title="Permalink to this headline">¶</a></h2>
+<p>一个子进程的退出/终止的情况可能会有很多种，
+通过使用宏，对 <code class="docutils literal"><span class="pre">wait</span></code> 或者 <code class="docutils literal"><span class="pre">waitpid</span></code> 的 <code class="docutils literal"><span class="pre">status</span></code> 参数进行判断，
+我们可以知道子进程是如何退出的。</p>
+<p>对 <code class="docutils literal"><span class="pre">status</span></code> 进行判断的其中四个宏包括：</p>
+<ul class="simple">
+<li><code class="docutils literal"><span class="pre">WIFEXITED</span></code> ：子进程正常返回时为真（通过 <code class="docutils literal"><span class="pre">main</span></code> 的 <code class="docutils literal"><span class="pre">return</span></code> ， <code class="docutils literal"><span class="pre">exit</span></code> 或者 <code class="docutils literal"><span class="pre">_exit</span></code> ）。</li>
+<li><code class="docutils literal"><span class="pre">WEXITSTATUS</span></code> ：返回子进程的退出状态，只应在 <code class="docutils literal"><span class="pre">WIFSIGNALED(status)</span></code> 为真时使用。</li>
+<li><code class="docutils literal"><span class="pre">WIFSIGNALED</span></code> ：子进程因为收到信号而终止时为真。</li>
+<li><code class="docutils literal"><span class="pre">WTERMSIG</span></code> ：返回造成子进程终止的信号，只应在 <code class="docutils literal"><span class="pre">WIFSIGNALED(status)</span></code> 为真时使用。</li>
+</ul>
+<p>另外还有其他宏可以判断子进程的状态，可以参考文档。</p>
+<p>以下程序展示了如何取出一个正常返回的子进程状态：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// 8-get-exit-status.c</span>
+
+<span class="cp">#include &lt;unistd.h&gt;</span>
+<span class="cp">#include &lt;stdio.h&gt;</span>
+<span class="cp">#include &lt;wait.h&gt;</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="kt">int</span> <span class="n">status</span><span class="p">;</span>
+    <span class="kt">pid_t</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">fork</span><span class="p">();</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">pid</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;fork error</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">pid</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="c1">// parent</span>
+        <span class="n">wait</span><span class="p">(</span><span class="o">&amp;</span><span class="n">status</span><span class="p">);</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">WIFEXITED</span><span class="p">(</span><span class="n">status</span><span class="p">))</span> <span class="p">{</span>
+            <span class="n">printf</span><span class="p">(</span><span class="s">&quot;child id %d ,normal terminated with status %d .</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">pid</span><span class="p">,</span> <span class="n">WEXITSTATUS</span><span class="p">(</span><span class="n">status</span><span class="p">));</span>
+        <span class="p">}</span>
+        <span class="k">else</span> <span class="p">{</span>
+            <span class="n">printf</span><span class="p">(</span><span class="s">&quot;child not terminate normaly, something went wrong</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+    <span class="k">else</span> <span class="p">{</span>
+        <span class="c1">// child</span>
+        <span class="k">return</span> <span class="mi">2</span><span class="p">;</span>   <span class="c1">// status</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>执行结果：</p>
+<div class="highlight-c"><div class="highlight"><pre>$ ./8-get-exit-status.out
+child id 9761 ,normal terminated with status 2 .
+</pre></div>
+</div>
+</div>
+<div class="section" id="id11">
+<h2>执行程序<a class="headerlink" href="#id11" title="Permalink to this headline">¶</a></h2>
+<p>在创建子进程之后，一个常见的操作是执行某个给定程序，
+这个操作可以用其中一种 <code class="docutils literal"><span class="pre">exec</span></code> 函数来完成，
+包括：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#include &lt;unistd.h&gt;</span>
+
+<span class="k">extern</span> <span class="kt">char</span> <span class="o">**</span><span class="n">environ</span><span class="p">;</span>
+
+<span class="kt">int</span> <span class="nf">execl</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">path</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">arg</span><span class="p">,</span> <span class="p">...);</span>
+<span class="kt">int</span> <span class="nf">execlp</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">file</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">arg</span><span class="p">,</span> <span class="p">...);</span>
+<span class="kt">int</span> <span class="nf">execle</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">path</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">arg</span><span class="p">,</span> <span class="p">...,</span> <span class="kt">char</span> <span class="o">*</span> <span class="k">const</span> <span class="n">envp</span><span class="p">[]);</span>
+<span class="kt">int</span> <span class="nf">execv</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">path</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="k">const</span> <span class="n">argv</span><span class="p">[]);</span>
+<span class="kt">int</span> <span class="nf">execvp</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">file</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="k">const</span> <span class="n">argv</span><span class="p">[]);</span>
+<span class="kt">int</span> <span class="nf">execvpe</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">file</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="k">const</span> <span class="n">argv</span><span class="p">[],</span> <span class="kt">char</span> <span class="o">*</span><span class="k">const</span> <span class="n">envp</span><span class="p">[]);</span>
+</pre></div>
+</div>
+<p>除了 <code class="docutils literal"><span class="pre">execve</span></code> 是系统调用之外，其他都是库函数。</p>
+<p>以下代码示例创建一个子进程，并让它执行一个 <code class="docutils literal"><span class="pre">hello_world</span></code> 程序：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// 8-exec.c</span>
+
+<span class="cp">#include &lt;unistd.h&gt;</span>
+<span class="cp">#include &lt;stdio.h&gt;</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="kt">pid_t</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">fork</span><span class="p">();</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">pid</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">&quot;fork error</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">pid</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="c1">// child</span>
+        <span class="n">execl</span><span class="p">(</span><span class="s">&quot;hello_world.out&quot;</span><span class="p">,</span> <span class="p">(</span><span class="kt">char</span> <span class="o">*</span><span class="p">)</span><span class="nb">NULL</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>执行结果：</p>
+<div class="highlight-c"><div class="highlight"><pre>$ ./8-exec.out
+$ hello world
+</pre></div>
+</div>
+<p>当进程调用 <code class="docutils literal"><span class="pre">exec</span></code> 函数时，该进程执行的程序完全替换为新程序，而新程序则从其 <code class="docutils literal"><span class="pre">main</span></code> 函数开始执行。
+因为调用 <code class="docutils literal"><span class="pre">exec</span></code> 并不创建新进程，所以前后的进程 ID 并未改变。
+<code class="docutils literal"><span class="pre">exec</span></code> 只是用一个全新的程序替换（overwritten）了当前进程的正文、数据、堆和栈。</p>
+<p>除了进程 ID 之外， <code class="docutils literal"><span class="pre">exec</span></code> 函数执行之后，原来的进程组 ID 、父 ID 、文件锁、根目录等都会被保留，
+而描述符是否关闭取决于 <code class="docutils literal"><span class="pre">close-on-exec</span></code> 标志，
+POSIX.1 要求在执行 <code class="docutils literal"><span class="pre">exec</span></code> 时关闭打开的目录流，
+等等，具体信息请参考文档。</p>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">第 8 章：进程控制</a><ul>
+<li><a class="reference internal" href="#id2">进程标识符</a></li>
+<li><a class="reference internal" href="#id3">创建进程</a></li>
+<li><a class="reference internal" href="#fork">fork 的用法</a></li>
+<li><a class="reference internal" href="#id4">父子进程间的数据副本</a></li>
+<li><a class="reference internal" href="#id5">父子进程间的文件描述符副本</a></li>
+<li><a class="reference internal" href="#id6">父子进程的属性</a></li>
+<li><a class="reference internal" href="#vfork">vfork</a></li>
+<li><a class="reference internal" href="#id7">进程退出</a></li>
+<li><a class="reference internal" href="#id8">父子进程在退出之后的互动</a></li>
+<li><a class="reference internal" href="#id9">处理子进程退出</a></li>
+<li><a class="reference internal" href="#id10">获取子进程的退出情况</a></li>
+<li><a class="reference internal" href="#id11">执行程序</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="chp4.html"
+                        title="previous chapter">第 4 章：文件和目录</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="chp10.html"
+                        title="next chapter">第 10 章：信号</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

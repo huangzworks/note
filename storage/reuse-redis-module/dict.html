@@ -1,0 +1,377 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>字典 &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="up" title="重用 Redis 模块" href="index.html" />
+    <link rel="next" title="整数集合" href="intset.html" />
+    <link rel="prev" title="双端链表" href="adlist.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="intset.html" title="整数集合"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="adlist.html" title="双端链表"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">重用 Redis 模块</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>字典<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="id2">
+<h2>适用范围<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>Redis 的字典实现具有以下特色：</p>
+<ol class="arabic simple">
+<li>可以通过设置不同的类型特定函数，让字典的键和值包含不同的类型，并为键使用不同的哈希算法。</li>
+<li>字典可以自动进行扩展或收缩，并且由此而带来的 rehash 是渐进式地进行的。</li>
+</ol>
+<p>字典的相关设计和操作 API 可以参考 <a class="reference external" href="http://www.redisbook.com">《Redis 设计与实现》</a> 的相关章节。</p>
+</div>
+<div class="section" id="id3">
+<h2>准备工作<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<ol class="arabic simple">
+<li>将 <code class="docutils literal"><span class="pre">dict.h</span></code> 、 <code class="docutils literal"><span class="pre">dict.c</span></code> 、 <code class="docutils literal"><span class="pre">fmacros.h</span></code> 、 <code class="docutils literal"><span class="pre">zmalloc.h</span></code> 和 <code class="docutils literal"><span class="pre">zmalloc.c</span></code> 文件复制到目标文件夹。</li>
+<li>将 <code class="docutils literal"><span class="pre">zmalloc.c</span></code> 中的 <code class="docutils literal"><span class="pre">#include</span> <span class="pre">&quot;config.h&quot;</span></code> 注释掉。</li>
+</ol>
+</div>
+<div class="section" id="id4">
+<h2>类型特定函数<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h2>
+<p>Redis 字典允许使用者为字典的键和值设置不同的类型特定函数，
+从而使字典可以包含各种不同类型的键和值，
+这些函数可以通过 <code class="docutils literal"><span class="pre">dictType</span></code> 类型定义：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// 摘录自 dict.h</span>
+
+<span class="cm">/*</span>
+<span class="cm"> * 特定于类型的一簇处理函数</span>
+<span class="cm"> */</span>
+<span class="k">typedef</span> <span class="k">struct</span> <span class="n">dictType</span> <span class="p">{</span>
+
+    <span class="c1">// 计算键的哈希值函数</span>
+    <span class="kt">unsigned</span> <span class="kt">int</span> <span class="p">(</span><span class="o">*</span><span class="n">hashFunction</span><span class="p">)(</span><span class="k">const</span> <span class="kt">void</span> <span class="o">*</span><span class="n">key</span><span class="p">);</span>
+
+    <span class="c1">// 复制键的函数</span>
+    <span class="kt">void</span> <span class="o">*</span><span class="p">(</span><span class="o">*</span><span class="n">keyDup</span><span class="p">)(</span><span class="kt">void</span> <span class="o">*</span><span class="n">privdata</span><span class="p">,</span> <span class="k">const</span> <span class="kt">void</span> <span class="o">*</span><span class="n">key</span><span class="p">);</span>
+
+    <span class="c1">// 复制值的函数</span>
+    <span class="kt">void</span> <span class="o">*</span><span class="p">(</span><span class="o">*</span><span class="n">valDup</span><span class="p">)(</span><span class="kt">void</span> <span class="o">*</span><span class="n">privdata</span><span class="p">,</span> <span class="k">const</span> <span class="kt">void</span> <span class="o">*</span><span class="n">obj</span><span class="p">);</span>
+
+    <span class="c1">// 对比两个键的函数</span>
+    <span class="kt">int</span> <span class="p">(</span><span class="o">*</span><span class="n">keyCompare</span><span class="p">)(</span><span class="kt">void</span> <span class="o">*</span><span class="n">privdata</span><span class="p">,</span> <span class="k">const</span> <span class="kt">void</span> <span class="o">*</span><span class="n">key1</span><span class="p">,</span> <span class="k">const</span> <span class="kt">void</span> <span class="o">*</span><span class="n">key2</span><span class="p">);</span>
+
+    <span class="c1">// 键的释构函数</span>
+    <span class="kt">void</span> <span class="p">(</span><span class="o">*</span><span class="n">keyDestructor</span><span class="p">)(</span><span class="kt">void</span> <span class="o">*</span><span class="n">privdata</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">key</span><span class="p">);</span>
+
+    <span class="c1">// 值的释构函数</span>
+    <span class="kt">void</span> <span class="p">(</span><span class="o">*</span><span class="n">valDestructor</span><span class="p">)(</span><span class="kt">void</span> <span class="o">*</span><span class="n">privdata</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">obj</span><span class="p">);</span>
+
+<span class="p">}</span> <span class="n">dictType</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>以下 <code class="docutils literal"><span class="pre">dictType</span></code> 定义了一个非常简单的，
+键和值都是整数的字典类型：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// int_dict_type.h</span>
+
+<span class="cm">/*</span>
+<span class="cm"> * key and value</span>
+<span class="cm"> */</span>
+<span class="k">typedef</span> <span class="k">struct</span> <span class="p">{</span>
+    <span class="kt">int</span> <span class="n">value</span><span class="p">;</span>
+<span class="p">}</span> <span class="n">KeyObject</span><span class="p">;</span>
+
+<span class="k">typedef</span> <span class="k">struct</span> <span class="p">{</span>
+    <span class="kt">int</span> <span class="n">value</span><span class="p">;</span>
+<span class="p">}</span> <span class="n">ValueObject</span><span class="p">;</span>
+
+<span class="cm">/*</span>
+<span class="cm"> * prorotype</span>
+<span class="cm"> */</span>
+<span class="n">KeyObject</span><span class="o">*</span> <span class="nf">create_key</span><span class="p">(</span><span class="kt">void</span><span class="p">);</span>
+<span class="kt">void</span> <span class="nf">release_key</span><span class="p">(</span><span class="n">KeyObject</span><span class="o">*</span> <span class="n">key</span><span class="p">);</span>
+
+<span class="n">ValueObject</span><span class="o">*</span> <span class="nf">create_value</span><span class="p">(</span><span class="kt">void</span><span class="p">);</span>
+<span class="kt">void</span> <span class="nf">release_value</span><span class="p">(</span><span class="n">ValueObject</span><span class="o">*</span> <span class="n">value</span><span class="p">);</span>
+
+<span class="cm">/*</span>
+<span class="cm"> * dict type</span>
+<span class="cm"> */</span>
+<span class="kt">unsigned</span> <span class="kt">int</span> <span class="nf">keyHashFunction</span><span class="p">(</span><span class="k">const</span> <span class="kt">void</span> <span class="o">*</span><span class="n">key</span><span class="p">);</span>
+<span class="kt">int</span> <span class="nf">keyCompareFunction</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">privdata</span><span class="p">,</span> <span class="k">const</span> <span class="kt">void</span> <span class="o">*</span><span class="n">x</span><span class="p">,</span> <span class="k">const</span> <span class="kt">void</span> <span class="o">*</span><span class="n">y</span><span class="p">);</span>
+<span class="kt">void</span> <span class="nf">keyDestructor</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">privdata</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">key</span><span class="p">);</span>
+<span class="kt">void</span> <span class="nf">valDestructor</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">privdata</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">value</span><span class="p">);</span>
+</pre></div>
+</div>
+<div class="highlight-c"><div class="highlight"><pre><span class="c1">// int_dict_type.c</span>
+
+<span class="cp">#include &lt;stdlib.h&gt; </span><span class="c1">// NULL</span>
+
+<span class="cp">#include &quot;zmalloc.h&quot;</span>
+<span class="cp">#include &quot;dict.h&quot;</span>
+<span class="cp">#include &quot;int_dict_type.h&quot;</span>
+
+
+<span class="cm">/*</span>
+<span class="cm"> * key</span>
+<span class="cm"> */</span>
+<span class="n">KeyObject</span><span class="o">*</span> <span class="nf">create_key</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">KeyObject</span><span class="o">*</span><span class="p">)</span><span class="n">zmalloc</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">KeyObject</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="nf">release_key</span><span class="p">(</span><span class="n">KeyObject</span><span class="o">*</span> <span class="n">key</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">zfree</span><span class="p">(</span><span class="n">key</span><span class="p">);</span>
+<span class="p">}</span>
+
+
+<span class="cm">/*</span>
+<span class="cm"> * value</span>
+<span class="cm"> */</span>
+<span class="n">ValueObject</span><span class="o">*</span> <span class="nf">create_value</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">ValueObject</span><span class="o">*</span><span class="p">)</span><span class="n">zmalloc</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">ValueObject</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="nf">release_value</span><span class="p">(</span><span class="n">ValueObject</span><span class="o">*</span> <span class="n">value</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">zfree</span><span class="p">(</span><span class="n">value</span><span class="p">);</span>
+<span class="p">}</span>
+
+
+<span class="cm">/* </span>
+<span class="cm"> * dict type</span>
+<span class="cm"> */</span>
+<span class="kt">unsigned</span> <span class="kt">int</span> <span class="nf">keyHashFunction</span><span class="p">(</span><span class="k">const</span> <span class="kt">void</span> <span class="o">*</span><span class="n">key</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">KeyObject</span> <span class="o">*</span><span class="n">k</span> <span class="o">=</span> <span class="p">(</span><span class="n">KeyObject</span><span class="o">*</span><span class="p">)</span><span class="n">key</span><span class="p">;</span>
+
+    <span class="kt">int</span> <span class="n">value</span> <span class="o">=</span> <span class="n">k</span><span class="o">-&gt;</span><span class="n">value</span><span class="p">;</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">value</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="mi">0</span> <span class="o">-</span> <span class="n">value</span><span class="p">;</span>
+    <span class="k">else</span>
+        <span class="k">return</span> <span class="n">value</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">int</span> <span class="nf">keyCompareFunction</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">privdata</span><span class="p">,</span> <span class="k">const</span> <span class="kt">void</span> <span class="o">*</span><span class="n">x</span><span class="p">,</span> <span class="k">const</span> <span class="kt">void</span> <span class="o">*</span><span class="n">y</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">DICT_NOTUSED</span><span class="p">(</span><span class="n">privdata</span><span class="p">);</span>
+
+    <span class="n">KeyObject</span> <span class="o">*</span><span class="n">kx</span> <span class="o">=</span> <span class="p">(</span><span class="n">KeyObject</span><span class="o">*</span><span class="p">)</span><span class="n">x</span><span class="p">;</span>
+    <span class="n">KeyObject</span> <span class="o">*</span><span class="n">ky</span> <span class="o">=</span> <span class="p">(</span><span class="n">KeyObject</span><span class="o">*</span><span class="p">)</span><span class="n">y</span><span class="p">;</span>
+
+    <span class="k">return</span> <span class="p">(</span><span class="n">kx</span><span class="o">-&gt;</span><span class="n">value</span> <span class="o">==</span> <span class="n">ky</span><span class="o">-&gt;</span><span class="n">value</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="nf">keyDestructor</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">privdata</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">key</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">DICT_NOTUSED</span><span class="p">(</span><span class="n">privdata</span><span class="p">);</span>
+
+    <span class="n">release_key</span><span class="p">(</span><span class="n">key</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="nf">valDestructor</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">privdata</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">value</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">DICT_NOTUSED</span><span class="p">(</span><span class="n">privdata</span><span class="p">);</span>
+
+    <span class="n">release_value</span><span class="p">(</span><span class="n">value</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="n">dictType</span> <span class="n">intDictType</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="n">keyHashFunction</span><span class="p">,</span>
+    <span class="nb">NULL</span><span class="p">,</span>
+    <span class="nb">NULL</span><span class="p">,</span>
+    <span class="n">keyCompareFunction</span><span class="p">,</span>
+    <span class="n">keyDestructor</span><span class="p">,</span>
+    <span class="n">valDestructor</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id5">
+<h2>测试驱动程序<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h2>
+<p>以下测试驱动程序使用了上面提到的整数字典类型，
+并对字典的创建、键值对添加和删除等操作进行了测试。</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#include &lt;stdlib.h&gt;</span>
+<span class="cp">#include &lt;assert.h&gt;</span>
+
+<span class="cp">#include &quot;int_dict_type.h&quot;</span>
+<span class="cp">#include &quot;dict.h&quot;</span>
+
+<span class="k">extern</span> <span class="n">dictType</span> <span class="n">intDictType</span><span class="p">;</span>
+
+<span class="kt">void</span> <span class="nf">test_empty_dict</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">dict</span><span class="o">*</span> <span class="n">d</span> <span class="o">=</span> <span class="n">dictCreate</span><span class="p">(</span><span class="o">&amp;</span><span class="n">intDictType</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+
+    <span class="n">dictRelease</span><span class="p">(</span><span class="n">d</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="nf">test_add_and_delete_key_value_pair</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// 创建新字典</span>
+    <span class="n">dict</span> <span class="o">*</span><span class="n">d</span> <span class="o">=</span> <span class="n">dictCreate</span><span class="p">(</span><span class="o">&amp;</span><span class="n">intDictType</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+
+    <span class="c1">// 创建键和值</span>
+    <span class="n">KeyObject</span> <span class="o">*</span><span class="n">k</span> <span class="o">=</span> <span class="n">create_key</span><span class="p">();</span>
+    <span class="n">k</span><span class="o">-&gt;</span><span class="n">value</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="n">ValueObject</span> <span class="o">*</span><span class="n">v</span> <span class="o">=</span> <span class="n">create_value</span><span class="p">();</span>
+    <span class="n">v</span><span class="o">-&gt;</span><span class="n">value</span> <span class="o">=</span> <span class="mi">10086</span><span class="p">;</span>
+
+    <span class="c1">// 添加键值对</span>
+    <span class="n">dictAdd</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">);</span>
+
+    <span class="n">assert</span><span class="p">(</span>
+        <span class="n">dictSize</span><span class="p">(</span><span class="n">d</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+    <span class="p">);</span>
+
+    <span class="n">assert</span><span class="p">(</span>
+        <span class="n">dictFind</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">NULL</span>
+    <span class="p">);</span>
+
+    <span class="c1">// 删除键值对</span>
+    <span class="n">dictDelete</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="n">k</span><span class="p">);</span>
+
+    <span class="n">assert</span><span class="p">(</span>
+        <span class="n">dictSize</span><span class="p">(</span><span class="n">d</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span>
+    <span class="p">);</span>
+
+    <span class="n">assert</span><span class="p">(</span>
+        <span class="n">dictFind</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span> <span class="o">==</span> <span class="nb">NULL</span>
+    <span class="p">);</span>
+
+    <span class="c1">// 释放字典</span>
+    <span class="n">dictRelease</span><span class="p">(</span><span class="n">d</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="nf">main</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+
+    <span class="n">test_empty_dict</span><span class="p">();</span>
+
+    <span class="n">test_add_and_delete_key_value_pair</span><span class="p">();</span>
+
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id6">
+<h2>完整源码<a class="headerlink" href="#id6" title="Permalink to this headline">¶</a></h2>
+<p>测试程序的完整源码可以在 <a class="reference external" href="https://github.com/huangz1990/blog/tree/master/storage/reuse-redis-module/code">这里</a> 的 <code class="docutils literal"><span class="pre">dict</span></code> 文件夹下找到。</p>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">字典</a><ul>
+<li><a class="reference internal" href="#id2">适用范围</a></li>
+<li><a class="reference internal" href="#id3">准备工作</a></li>
+<li><a class="reference internal" href="#id4">类型特定函数</a></li>
+<li><a class="reference internal" href="#id5">测试驱动程序</a></li>
+<li><a class="reference internal" href="#id6">完整源码</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="adlist.html"
+                        title="previous chapter">双端链表</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="intset.html"
+                        title="next chapter">整数集合</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

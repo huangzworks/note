@@ -1,0 +1,168 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>指数补偿 —— Exponential backoff &mdash; huangz/note</title>
+    
+    <link rel="stylesheet" href="../../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'present',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="huangz/note" href="../../index.html" />
+    <link rel="up" title="算术" href="index.html" />
+    <link rel="next" title="将字符串解释为数字 —— Parse string to number" href="parse-string-to-number.html" />
+    <link rel="prev" title="幂次定律 —— Power Law" href="power-law.html" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+
+
+
+</head>
+<body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="parse-string-to-number.html" title="将字符串解释为数字 —— Parse string to number"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="power-law.html" title="幂次定律 —— Power Law"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">huangz/note</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">算术</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="exponential-backoff">
+<h1>指数补偿 —— Exponential backoff<a class="headerlink" href="#exponential-backoff" title="Permalink to this headline">¶</a></h1>
+<p>指数补偿指的是，在执行事件时，通过反馈，逐渐降低某个过程的速率，从而最终找到一个合适的速率（来处理事件）。</p>
+<p>指数补偿通常用于网络和传输协议，比如在进行网络连接时，如果第一次请求失败，那么可以等待 <img class="math" src="../../_images/math/44780f0598b4d22c6888cfca27deb04115f7fa88.png" alt="t_1"/> 之后重试，如果再次请求还是失败，那么等待 <img class="math" src="../../_images/math/c4a5e7418ac67584c9e6586936fcaf49afe6cb1e.png" alt="t_2"/> 之后重试。。。</p>
+<p>重试可以一直继续下去，或者等待次数或等待时间超过特定值为止。</p>
+<p>等待的时间 <img class="math" src="../../_images/math/918af2e01d390138b6c578872acef0285471adb1.png" alt="t_n"/> 可以是随机选择，也可以随着重试的次数而逐渐加大，诸如此类。</p>
+<p>详细内容请参考维基百科的 <a class="reference external" href="http://en.wikipedia.org/wiki/Exponential_backoff">Exponential backoff</a> 词条。</p>
+<div class="section" id="id2">
+<h2>应用<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>《UNIX 环境高级编程，第二版》（APUE，2E） 16.4 节提供了一个带重试的 <code class="docutils literal"><span class="pre">socket</span></code> 连接程序，
+如果连接失败，
+那么程序就睡眠一段时间再尝试，
+每失败一次睡眠的时间就延长一些：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#include &quot;apue.h&quot;</span>
+<span class="cp">#include &lt;sys/socket.h&gt;</span>
+
+<span class="cp">#define MAXSLEEP 128</span>
+
+<span class="kt">int</span>
+<span class="nf">connect_retry</span><span class="p">(</span><span class="kt">int</span> <span class="n">sockfd</span><span class="p">,</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">sockaddr</span> <span class="o">*</span><span class="n">addr</span><span class="p">,</span> <span class="kt">socklen_t</span> <span class="n">alen</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="kt">int</span> <span class="n">nsec</span><span class="p">;</span>
+
+    <span class="k">for</span> <span class="p">(</span><span class="n">nsec</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span> <span class="n">nsec</span> <span class="o">&lt;</span> <span class="n">MAXSLEEP</span><span class="p">;</span> <span class="n">nsec</span> <span class="o">&lt;&lt;=</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">connect</span><span class="p">(</span><span class="n">sockfd</span><span class="p">,</span> <span class="n">addr</span><span class="p">,</span> <span class="n">alen</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+            <span class="c1">// connect accepted.</span>
+            <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+        <span class="p">}</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">nsec</span> <span class="o">&lt;=</span> <span class="n">MAXSLEEP</span><span class="o">/</span><span class="mi">2</span><span class="p">)</span>
+            <span class="n">sleep</span><span class="p">(</span><span class="n">nsec</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+
+    <h2>
+        留言
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'notehuangzme'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">指数补偿 —— Exponential backoff</a><ul>
+<li><a class="reference internal" href="#id2">应用</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="power-law.html"
+                        title="previous chapter">幂次定律 —— Power Law</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="parse-string-to-number.html"
+                        title="next chapter">将字符串解释为数字 —— Parse string to number</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, huangz.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>
