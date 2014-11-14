@@ -91,6 +91,7 @@ huangz/note
    :maxdepth: 2
 
    thinking_and_learning/pragmatic_thinking_and_learning/index
+   thinking_and_learning/bakuman/index
 
 
 自省
