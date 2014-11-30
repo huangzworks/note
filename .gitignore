@@ -3,3 +3,4 @@ _build/
 *.out
 *.o
 *.pyc
+.DS_Store
