@@ -16,3 +16,5 @@ MariaDB
    install
    send-query
    primary-db-operation
+   primary-table-operation
+   primary-query-operation
