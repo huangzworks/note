@@ -45,6 +45,7 @@ huangz/note
    :maxdepth: 2
     
    os/apue/index
+   os/fedora/index
 
 
 .. _network:
