@@ -453,25 +453,25 @@ Redis 使用了两个 FLAG 变量，用于检查所执行命令的属性。
 
 ``luaRedisGenericCommand`` 函数的定义比较长，这里不打算一段段地分析它的行为了，有兴趣的可以直接去看带注释的源码，以下是这个函数的大致工作：
 
-1) 声明一些 Redis Object 实例，用于处理所执行的 Redis 命令  
+1) 声明一些 Redis Object 实例，用于处理所执行的 Redis 命令
 
-2) 对 ``call`` 或者 ``pcall`` 函数的参数进行检查，确保参数正确  
+2) 对 ``call`` 或者 ``pcall`` 函数的参数进行检查，确保参数正确
 
-3) 对调用的 Redis 命令进行检查，确保是可以在脚本环境中运行的命令（一些命令，比如 ``WATCH`` ，就无法在脚本环境中执行）  
+3) 对调用的 Redis 命令进行检查，确保是可以在脚本环境中运行的命令（一些命令，比如 ``WATCH`` ，就无法在脚本环境中执行）
 
-4) 如果要执行的 Redis 是写入型的（比如 ``SET`` ），那么检查它的执行环境是否合法  
+4) 如果要执行的 Redis 是写入型的（比如 ``SET`` ），那么检查它的执行环境是否合法
 
-5) 查看内存是否足够运行指定命令，如果内存不够，尝试释放内存  
+5) 查看内存是否足够运行指定命令，如果内存不够，尝试释放内存
 
-6) 按需设置 ``server.lua_random_dirty`` 或 ``server.lua_write_dirty`` 这两个 FLAG   
+6) 按需设置 ``server.lua_random_dirty`` 或 ``server.lua_write_dirty`` 这两个 FLAG
 
-7) 执行命令  
+7) 执行命令
 
-8) 取出命令的返回值，使用 ``redisProtocolToLuaType`` 函数将这些返回值从 Redis 类型转换成 Lua 类型  
+8) 取出命令的返回值，使用 ``redisProtocolToLuaType`` 函数将这些返回值从 Redis 类型转换成 Lua 类型
 
-9) 如果执行的命令是 non deterministic 型的，那么对返回值进行一次排序  
+9) 如果执行的命令是 non deterministic 型的，那么对返回值进行一次排序
 
-10) 清理环境  
+10) 清理环境
 
 好的，以上就是 ``luaRedisGenericCommand`` 的执行过程了。
 
@@ -543,4 +543,4 @@ SCRIPT 命令的实现
 搞定！
 --------
 
-以上就是 Redis 的 Lua 脚本功能的实现分析了，因为边幅的原因，这里主要介绍了几个主要函数的最重要的执行部分，一些错误处理或者其他细节功能的实现就被忽略掉了，我将带有完整注释的 ``scripting.c`` 放到了 GITHUB 上，想了解所有细节的朋友可以到上面看看： `https://github.com/huangz1990/reading_redis_source <https://github.com/huangz1990/reading_redis_source>`_ 。
+以上就是 Redis 的 Lua 脚本功能的实现分析了，因为篇幅的原因，这里主要介绍了几个主要函数的最重要的执行部分，一些错误处理或者其他细节功能的实现就被忽略掉了，我将带有完整注释的 ``scripting.c`` 放到了 GitHub 上，想了解所有细节的朋友可以到上面看看： `https://github.com/huangz1990/reading_redis_source <https://github.com/huangz1990/reading_redis_source>`_ 。

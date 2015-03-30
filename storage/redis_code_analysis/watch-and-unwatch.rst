@@ -207,7 +207,7 @@ WATCH 命令的实现
         /* This key is not already watched in this DB. Let's add it */
         // 如果 KEY 还没有被 WATCH 过，那么对它进行 WATCH
         clients = dictFetchValue(c->db->watched_keys,key);
-        if (!clients) { 
+        if (!clients) {
             // 如果 clients 链表不存在
             // 说明这个客户端是第一个监视这个 DB 的这个 KEY 的客户端
             // 那么创建 clients 链表，并将它添加到 c->db->watched_keys 字典中
@@ -216,7 +216,7 @@ WATCH 命令的实现
             incrRefCount(key);
         }
         // 将客户端添加到 clients 链表
-        listAddNodeTail(clients,c); 
+        listAddNodeTail(clients,c);
 
         /* Add the new key to the lits of keys watched by this client */
         // 除了 c->db->watched_keys 之外
@@ -320,4 +320,4 @@ touchWatchedKey 和 touchWatchedKeysOnFlush 函数
 
 从 Redis 2.6 开始，使用脚本可以更简单方便地完成事务工作。 `Redis 官网上也说 <http://redis.io/topics/transactions>`_ 未来可能会废弃 ``MULTI`` 、 ``EXEC`` 和 ``WATCH`` 等命令，所有事务工作都交由脚本完成，这应该是一个好方向。
 
-最后，和往常一样，带注释的完整代码可以在 GITHUB 查看： `github.com/huangz1990/reading_redis_source <https://github.com/huangz1990/reading_redis_source>`_ 。
+最后，和往常一样，带注释的完整代码可以在 GitHub 查看： `github.com/huangz1990/reading_redis_source <https://github.com/huangz1990/reading_redis_source>`_ 。
