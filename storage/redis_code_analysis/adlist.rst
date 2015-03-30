@@ -133,4 +133,4 @@ Redis 针对 ``list`` 结构实现了一个\ `迭代器 <http://en.wikipedia.org
 
 和以往不同，因为双端链表和链表迭代器都非常常见，所以这篇文章没有像往常一样，对实现源码作详细的分析，而是将注意力集中到数据结构的定义，以及 API 的展示上。
 
-如果对源码的细节感兴趣，可以到 GITHUB 上查看带注释的完整源码： `https://github.com/huangz1990/reading_redis_source <https://github.com/huangz1990/reading_redis_source>`_ 。
+如果对源码的细节感兴趣，可以到 GitHub 上查看带注释的完整源码： `https://github.com/huangz1990/reading_redis_source <https://github.com/huangz1990/reading_redis_source>`_ 。

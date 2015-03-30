@@ -97,7 +97,7 @@
         _dictReset(&d->ht[1]);
 
         d->type = type;             // 设置函数指针
-        d->privdata = privDataPtr; 
+        d->privdata = privDataPtr;
         d->rehashidx = -1;          // -1 表示没有在进行 rehash
         d->iterators = 0;           // 0 表示没有迭代器在进行迭代
 
@@ -135,14 +135,14 @@
 
     dictEntry *dictAddRaw(dict *d, void *key)
     {
-        // 被省略的代码... 
+        // 被省略的代码...
 
         // 计算 key 的 index 值
-        // 如果 key 已经存在，_dictKeyIndex 返回 -1 
+        // 如果 key 已经存在，_dictKeyIndex 返回 -1
         if ((index = _dictKeyIndex(d, key)) == -1)
             return NULL;
 
-        // 被省略的代码... 
+        // 被省略的代码...
     }
 
 ``_dictKeyIndex`` 会在计算 ``index`` 值之前，先调用 ``_dictExpandIfNeeded`` ，检查两个哈希表是否有足够的空间容纳新元素：
@@ -180,7 +180,7 @@
 
     int dictExpand(dict *d, unsigned long size)
     {
-        // 创建带链表数组的新哈希表 
+        // 创建带链表数组的新哈希表
         dictht n; /* the new hash table */
         unsigned long realsize = _dictNextPower(size);
 
@@ -254,7 +254,7 @@
 
     int dictExpand(dict *d, unsigned long size)
     {
-        // 创建带链表数组的新哈希表 
+        // 创建带链表数组的新哈希表
         dictht n; /* the new hash table */
         unsigned long realsize = _dictNextPower(size);
 
@@ -356,7 +356,7 @@ Redis 对字典的 rehash 操作是通过将 0 号哈希表中的所有数据移
                 return 0;
             }
 
-            // 进行 rehash 
+            // 进行 rehash
             /* Note that rehashidx can't overflow as we are sure there are more
              * elements because ht[0].used != 0 */
             assert(d->ht[0].size > (unsigned)d->rehashidx);
@@ -381,7 +381,7 @@ Redis 对字典的 rehash 操作是通过将 0 号哈希表中的所有数据移
         return 1;
     }
 
-另外，还有一个确保 rehash 得以最终完成的重要条件，那就是 —— 当 ``rehashidx`` 不等于 ``-1`` ，也即是 ``dictIsRehashing`` 为真时，所有新添加的元素都会直接被加到 1 号数据库，这样 0 号哈希表的大小就会只减不增，最终 rehash 总会有完成的一刻（假如新加入的元素还继续被放进 0 号哈希表，那么尽管平摊 rehash 一直在努力地进行，但说不定 rehash 还是永远也完成不了）： 
+另外，还有一个确保 rehash 得以最终完成的重要条件，那就是 —— 当 ``rehashidx`` 不等于 ``-1`` ，也即是 ``dictIsRehashing`` 为真时，所有新添加的元素都会直接被加到 1 号数据库，这样 0 号哈希表的大小就会只减不增，最终 rehash 总会有完成的一刻（假如新加入的元素还继续被放进 0 号哈希表，那么尽管平摊 rehash 一直在努力地进行，但说不定 rehash 还是永远也完成不了）：
 
 ::
 
@@ -465,4 +465,4 @@ Redis 对字典的 rehash 操作是通过将 0 号哈希表中的所有数据移
 小结
 --------
 
-以上就是 Redis 字典结构的实现分析了，因为边幅所限，这里展示的函数多数都只贴出了主要部分的代码，如果对所有代码的细节感兴趣，可以到我的 GITHUB 上去找带有完整注释的代码： `https://github.com/huangz1990/reading_redis_source <https://github.com/huangz1990/reading_redis_source>`_
+以上就是 Redis 字典结构的实现分析了，因为篇幅所限，这里展示的函数多数都只贴出了主要部分的代码，如果对所有代码的细节感兴趣，可以到我的 GitHub 上去找带有完整注释的代码： `https://github.com/huangz1990/reading_redis_source <https://github.com/huangz1990/reading_redis_source>`_

@@ -86,12 +86,12 @@ MULTI 命令
         if (c->flags & REDIS_MULTI &&
             c->cmd->proc != execCommand && c->cmd->proc != discardCommand &&
             c->cmd->proc != multiCommand && c->cmd->proc != watchCommand)
-        {    
+        {
             queueMultiCommand(c);       // 入队
             addReply(c,shared.queued);  // 返回已入队信息
         } else {
             call(c,REDIS_CALL_FULL);
-        }    
+        }
         return REDIS_OK;
     }
 
@@ -227,7 +227,7 @@ MULTI 命令
          * both the AOF and the replication link will have the same consistency
          * and atomicity guarantees. */
         // 为保证一致性和原子性
-        // 如果处在 AOF 模式中，向 AOF 文件发送 MULTI 
+        // 如果处在 AOF 模式中，向 AOF 文件发送 MULTI
         // 如果处在复制模式中，向附属节点发送 MULTI
         execCommandReplicateMulti(c);
 
@@ -352,6 +352,6 @@ MULTI 命令
 
 对 Redis 事务的实现分析就到此结束了，希望这篇文章对你理解 Redis 的事务有所帮助。
 
-跟之前一样，我将带有完整注释的代码放到了 GITHUB 上，有兴趣了解全部细节的朋友可以参考源码： `https://github.com/huangz1990/reading_redis_source <https://github.com/huangz1990/reading_redis_source>`_ 。
+跟之前一样，我将带有完整注释的代码放到了 GitHub 上，有兴趣了解全部细节的朋友可以参考源码： `https://github.com/huangz1990/reading_redis_source <https://github.com/huangz1990/reading_redis_source>`_ 。
 
 最后，和 Redis 的事务有关的命令还有 ``WATCH`` 和 ``UNWATCH`` ，在下篇文章中，会继续探讨它们的实现方式。

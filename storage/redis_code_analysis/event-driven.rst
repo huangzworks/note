@@ -53,11 +53,11 @@ Redis 有两种事件类型，分别是文件事件和时间事件。
         // 状态 mask
         int mask; /* one of AE_(READABLE|WRITABLE) */
         // 读操作函数
-        aeFileProc *rfileProc;  
+        aeFileProc *rfileProc;
         // 写操作函数
-        aeFileProc *wfileProc;  
+        aeFileProc *wfileProc;
         // 执行命令时所需的客户端资料
-        void *clientData;       
+        void *clientData;
     } aeFileEvent;
 
 ``aeFileEvent`` 结构可以同时持有 ``rfileProc`` 和 ``wfileProc`` 两个事件处理函数，但每次执行事件，只能有一个函数被执行：事件要么读取，要么写入，但不能既写入又读取。
@@ -77,9 +77,9 @@ Redis 有两种事件类型，分别是文件事件和时间事件。
 
     typedef struct aeFiredEvent {
         // 文件描述符
-        int fd;     
+        int fd;
         // 状态 mask
-        int mask;   
+        int mask;
     } aeFiredEvent;
 
 尽管听上去 ``aeFiredEvent`` 像是一种新的事件，但它实际上不是 ——
@@ -100,13 +100,13 @@ Redis 有两种事件类型，分别是文件事件和时间事件。
         long when_sec; /* seconds */
         long when_ms; /* milliseconds */
         // 时间事件处理函数
-        aeTimeProc *timeProc;   
+        aeTimeProc *timeProc;
         // 在删除时间事件前要执行的函数
-        aeEventFinalizerProc *finalizerProc;    
+        aeEventFinalizerProc *finalizerProc;
         // 客户端资料
-        void *clientData;   
+        void *clientData;
         // 指向下一时间事件，形成链表
-        struct aeTimeEvent *next;   
+        struct aeTimeEvent *next;
     } aeTimeEvent;
 
 有三个属性需要额外说明：
@@ -315,4 +315,4 @@ Redis 的事件处理主循环由 ``aeMain`` 函数进行：
 
 文章主要介绍了几个事件结构，事件状态结构，以及事件处理循环和事件处理器的定义。
 
-因为边幅所限，一些函数的只是简单地做了介绍，没有详细地进行分析，如果对细节有兴趣的话，可以到 GitHub 上查看带注释的源码： `https://github.com/huangz1990/reading_redis_source <https://github.com/huangz1990/reading_redis_source>`_ 。
+因为篇幅所限，一些函数的只是简单地做了介绍，没有详细地进行分析，如果对细节有兴趣的话，可以到 GitHub 上查看带注释的源码： `https://github.com/huangz1990/reading_redis_source <https://github.com/huangz1990/reading_redis_source>`_ 。
